@@ -27,7 +27,8 @@ ensure_env() {
 	fi
 }
 
-sub() { git -C "$SUBMODULE" "$@"; }
+# core.longpaths: some datapack paths exceed the Windows 260 character limit
+sub() { git -C "$SUBMODULE" -c core.longpaths=true "$@"; }
 
 # Clones the submodule shallow, blob-less and sparse, so only the chosen chronicle is downloaded
 ensure_submodule() {
@@ -50,6 +51,7 @@ ensure_submodule() {
 	log "Cloning $url (sparse: $chronicle, commit ${sha:0:10})"
 	rm -rf "$SUBMODULE"
 	git clone --filter=blob:none --no-checkout --depth 1 "$url" "$SUBMODULE"
+	sub config core.longpaths true
 	sub sparse-checkout set --cone "$chronicle"
 	sub fetch --depth 1 --filter=blob:none origin "$sha"
 	sub checkout -q "$sha"
