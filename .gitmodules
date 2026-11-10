@@ -1,0 +1,5 @@
+[submodule "l2j_mobius"]
+	path = l2j_mobius
+	url = https://gitlab.com/MobiusDevelopment/L2J_Mobius.git
+	branch = master
+	shallow = true
