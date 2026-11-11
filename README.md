@@ -37,12 +37,12 @@ Then connect a game client, see [Connecting a client](#connecting-a-client).
 
 | Command | Description |
 |---|---|
-| `./l2.sh up` | Prepare submodule and `.env`, build and start (default command) |
+| `./l2.sh up` | Prepare submodule and `.env`, build and start |
 | `./l2.sh down` | Stop containers (database volume is kept) |
 | `./l2.sh restart game` | Restart a service, e.g. after editing `overrides/` |
 | `./l2.sh logs game` | Follow logs of `db`, `login` or `game` |
 | `./l2.sh ps` | Container status |
-| `./l2.sh status` | Configured server and chronicle, container state, login registration and warnings (e.g. no geodata) |
+| `./l2.sh status` | Configured server and chronicle, container state, login registration, warnings (e.g. no geodata) and the next step; also `./l2.sh` without a command |
 | `./l2.sh server [name]` | List available servers or switch to one |
 | `./l2.sh chronicle [name]` | List the current server's chronicles or switch to one |
 | `./l2.sh update` | Move the server submodule to the latest upstream commit |

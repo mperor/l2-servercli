@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Single entry point for L2 Quickstart.
-# Usage: ./l2.sh [command] [args]   (run ./l2.sh help for the list)
+# Usage: ./l2.sh [command] [args]   (no command: status; run ./l2.sh help for the list)
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -154,14 +154,22 @@ cmd_status() {
 		state="$(service_state "$s")"
 		printf '%-11s %s\n' "$s:" "${state:-not created}"
 	done
+	local next
 	if docker compose ps --status running -q game 2>/dev/null | grep -q .; then
 		if docker compose logs --no-log-prefix game 2>/dev/null | grep -q "$PROVIDER_REGISTERED_LOG"; then
 			printf '%-11s %s\n' Login: "game server registered, ready for clients"
+			next="Connect a client to 127.0.0.1:$(env_get LOGIN_PORT) (see README, Connecting a client)"
 		else
-			printf '%-11s %s\n' Login: "game server not registered yet (starting? see ./l2.sh logs game)"
+			printf '%-11s %s\n' Login: "game server not registered yet"
+			next="Follow startup with: ./l2.sh logs game"
 		fi
+	elif [ -n "$(running_other_projects)" ]; then
+		next="Start it with: ./l2.sh up (replaces the running project)"
+	else
+		next="Start it with: ./l2.sh up"
 	fi
 	show_notes
+	log "$next"
 }
 
 stop_running() {
@@ -311,14 +319,15 @@ cmd_gm() {
 
 cmd_help() {
 	cat <<EOF
-Usage: ./l2.sh [command]
+Usage: ./l2.sh [command]   (without a command: status)
 
-  up [services]       Prepare source/.env, build and start (default)
+  up [services]       Prepare source/.env, build and start
   down                Stop and remove containers (data volumes are kept)
   restart [service]   Restart services, e.g. after editing overrides/
   logs [service]      Follow logs (db, login, game)
   ps                  Show container status
-  status              Show the configured server and chronicle, its state and warnings (e.g. no geodata)
+  status              Show the configured server and chronicle, its state, warnings (e.g. no geodata)
+                      and the next step (default)
   server [name]       List available servers or switch to one (e.g. l2jmobius)
   chronicle [name]    List the current server's chronicles or switch to one
   update              Move the server source to the latest upstream commit
@@ -328,7 +337,7 @@ Usage: ./l2.sh [command]
 EOF
 }
 
-command="${1:-up}"
+command="${1:-status}"
 [ $# -gt 0 ] && shift
 
 case "$command" in
