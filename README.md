@@ -1,4 +1,4 @@
-# L2 Docker
+# L2 Quickstart
 
 Run an open-source Lineage II server emulator with a single command. Each server's source is pulled
 in as a git submodule from its official repository, built inside Docker and started together with
@@ -18,8 +18,8 @@ MariaDB. Supported servers (`SERVER` in `.env`, see [Servers](#servers)):
 ## Quick start
 
 ```bash
-git clone https://github.com/mperor/l2-docker.git
-cd l2-docker
+git clone https://github.com/mperor/l2-quickstart.git
+cd l2-quickstart
 ./l2.sh up          # Windows PowerShell: .\l2.ps1 up
 ```
 

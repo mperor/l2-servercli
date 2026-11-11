@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Single entry point for the L2 Docker setup.
+# Single entry point for L2 Quickstart.
 # Usage: ./l2.sh [command] [args]   (run ./l2.sh help for the list)
 set -euo pipefail
 
