@@ -1,5 +1,5 @@
 # Build context: a single chronicle directory from the l2j_mobius submodule
-# (e.g. l2j_mobius/L2J_Mobius_CT_0_Interlude). Extra context "scripts" = ./docker.
+# (e.g. sources/l2j_mobius/L2J_Mobius_CT_0_Interlude). Extra context "scripts" = servers/l2jmobius.
 
 FROM eclipse-temurin:27-jdk AS build
 

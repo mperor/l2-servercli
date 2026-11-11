@@ -1,18 +1,14 @@
 name: l2jmobius
 
-# Values come from .env (created from .env.example by l2.sh)
+# Server-independent part. The server-specific part (image, build, SQL import, log paths, volume names)
+# is servers/<SERVER>/compose.yml, merged on top through COMPOSE_FILE in .env (managed by l2.sh).
+# Values come from .env (created from .env.example by l2.sh).
 x-db-env: &db-env
   MARIADB_DATABASE: ${MARIADB_DATABASE:?set MARIADB_DATABASE in .env}
   MARIADB_USER: ${MARIADB_USER:?set MARIADB_USER in .env}
   MARIADB_PASSWORD: ${MARIADB_PASSWORD:?set MARIADB_PASSWORD in .env}
 
 x-server: &server
-  image: l2jmobius:${CHRONICLE:?set CHRONICLE in .env}
-  build:
-    context: ./l2j_mobius/${CHRONICLE}
-    dockerfile: ../../docker/Dockerfile
-    additional_contexts:
-      scripts: ./docker
   restart: unless-stopped
   depends_on:
     db:
@@ -34,9 +30,6 @@ services:
       start_period: 120s
     volumes:
       - db-data:/var/lib/mysql
-      - ./docker/initdb.sh:/docker-entrypoint-initdb.d/initdb.sh:ro
-      - ./l2j_mobius/${CHRONICLE}/dist/db_installer/sql/login:/l2-sql/login:ro
-      - ./l2j_mobius/${CHRONICLE}/dist/db_installer/sql/game:/l2-sql/game:ro
 
   login:
     <<: *server
@@ -47,8 +40,7 @@ services:
     ports:
       - "${LOGIN_PORT:-2106}:2106"
     volumes:
-      - ./overrides:/overrides:ro
-      - ./data/logs/login:/opt/l2/dist/login/log
+      - ./overrides/${SERVER:?set SERVER in .env}:/overrides:ro
 
   game:
     <<: *server
@@ -63,11 +55,10 @@ services:
       JAVA_OPTS: ${GAME_JAVA_OPTS:-}
       EXTERNAL_HOST: ${EXTERNAL_HOST:-127.0.0.1}
     ports:
-      # Must stay 7777 on the host unless GameserverPort is changed as well
+      # Must stay 7777 on the host unless the game server port is changed as well
       - "7777:7777"
     volumes:
-      - ./overrides:/overrides:ro
-      - ./data/logs/game:/opt/l2/dist/game/log
+      - ./overrides/${SERVER}:/overrides:ro
       - game-state:/state
 
   phpmyadmin:
@@ -82,9 +73,7 @@ services:
       db:
         condition: service_healthy
 
-# One database and state volume per chronicle, so switching chronicles keeps data apart
+# Named per server and chronicle in servers/<SERVER>/compose.yml, so switching keeps data apart
 volumes:
   db-data:
-    name: l2jmobius-db-${CHRONICLE}
   game-state:
-    name: l2jmobius-state-${CHRONICLE}

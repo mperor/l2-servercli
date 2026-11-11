@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
-# Single entry point for the L2jMobius Docker setup.
+# Single entry point for the L2 Docker setup.
 # Usage: ./l2.sh [command] [args]   (run ./l2.sh help for the list)
 set -euo pipefail
 
 cd "$(dirname "$0")"
-
-SUBMODULE=l2j_mobius
 
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31mError:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -19,78 +17,123 @@ env_set() {
 	fi
 }
 
+available_servers() { ls servers; }
+
+# Compose merges servers/<SERVER>/compose.yml over the common docker-compose.yml.
+# COMPOSE_FILE lives in .env, so plain "docker compose ..." commands work as well.
+select_server_compose() {
+	env_set COMPOSE_PATH_SEPARATOR :
+	env_set COMPOSE_FILE "docker-compose.yml:servers/$1/compose.yml"
+}
+
 ensure_env() {
 	if [ ! -f .env ]; then
 		cp .env.example .env
 		log "Created .env from .env.example (change the passwords before exposing the server)"
 	fi
+	# .env files from before the multi-server layout only had CHRONICLE (L2jMobius)
+	if [ -z "$(env_get SERVER)" ]; then
+		env_set SERVER l2jmobius
+		log "Set SERVER=l2jmobius in .env"
+	fi
+	local server
+	server="$(env_get SERVER)"
+	[ -f "servers/$server/provider.sh" ] || die "Unknown SERVER '$server' in .env. List them with: ./l2.sh server"
+	[ "$(env_get COMPOSE_FILE)" = "docker-compose.yml:servers/$server/compose.yml" ] || select_server_compose "$server"
 }
 
-# core.longpaths: some datapack paths exceed the Windows 260 character limit
-sub() { git -C "$SUBMODULE" -c core.longpaths=true "$@"; }
+load_provider() {
+	# shellcheck source=servers/l2jmobius/provider.sh
+	source "servers/$(env_get SERVER)/provider.sh"
+}
 
-# Clones the submodule shallow, blob-less and sparse, so only the chosen chronicle is downloaded
+submodule_path() { git config -f .gitmodules "submodule.$1.path"; }
+
+# core.longpaths: some datapack paths exceed the Windows 260 character limit
+sub() {
+	local name="$1"
+	shift
+	git -C "$(submodule_path "$name")" -c core.longpaths=true "$@"
+}
+
+# Clones a submodule shallow and blob-less; with sparse directories given, only those are checked out
 ensure_submodule() {
-	local chronicle="$1"
-	if [ -e "$SUBMODULE/.git" ]; then
+	local name="$1"
+	shift
+	local path
+	path="$(submodule_path "$name")"
+	[ -n "$path" ] || die "Submodule $name not found in .gitmodules"
+	if [ -e "$path/.git" ]; then
 		return
 	fi
 
-	if [ -d ".git/modules/$SUBMODULE" ]; then
-		log "Restoring submodule working tree"
-		git submodule update --init "$SUBMODULE"
+	if [ -d ".git/modules/$name" ]; then
+		log "Restoring submodule working tree $path"
+		git submodule update --init "$path"
 		return
 	fi
 
 	local url sha
-	url="$(git config -f .gitmodules "submodule.$SUBMODULE.url")"
-	sha="$(git ls-tree HEAD "$SUBMODULE" | awk '{print $3}')"
-	[ -n "$sha" ] || die "Submodule commit not found in HEAD"
+	url="$(git config -f .gitmodules "submodule.$name.url")"
+	sha="$(git ls-tree HEAD "$path" | awk '{print $3}')"
+	[ -n "$sha" ] || die "Submodule commit for $path not found in HEAD"
 
-	log "Cloning $url (sparse: $chronicle, commit ${sha:0:10})"
-	rm -rf "$SUBMODULE"
-	git clone --filter=blob:none --no-checkout --depth 1 "$url" "$SUBMODULE"
-	sub config core.longpaths true
-	sub sparse-checkout set --cone "$chronicle"
-	sub fetch --depth 1 --filter=blob:none origin "$sha"
-	sub checkout -q "$sha"
-	git submodule init "$SUBMODULE"
-	git submodule absorbgitdirs "$SUBMODULE"
-}
-
-# Lists every chronicle directory in the submodule commit (works without checking them out)
-available_chronicles() { sub ls-tree -d --name-only HEAD | grep '^L2J_Mobius_'; }
-
-# Client protocol revision the chronicle's game server accepts
-protocol_of() {
-	sed -n 's/^AllowedProtocolRevisions *= *//p' "$SUBMODULE/$1/dist/game/config/Server.ini" 2>/dev/null | tr -d '\r'
-}
-
-ensure_chronicle_checked_out() {
-	local chronicle="$1"
-	[ -d "$SUBMODULE/$chronicle" ] && return
-	available_chronicles | grep -qx "$chronicle" \
-		|| die "Unknown chronicle '$chronicle'. List them with: ./l2.sh chronicle"
-	log "Adding $chronicle to sparse checkout"
-	sub sparse-checkout add "$chronicle"
+	log "Cloning $url${*:+ (sparse: $*)}, commit ${sha:0:10}"
+	rm -rf "$path"
+	git clone --filter=blob:none --no-checkout --depth 1 "$url" "$path"
+	sub "$name" config core.longpaths true
+	if [ $# -gt 0 ]; then
+		sub "$name" sparse-checkout set --cone "$@"
+	fi
+	sub "$name" fetch --depth 1 --filter=blob:none origin "$sha"
+	sub "$name" checkout -q "$sha"
+	git submodule init "$path"
+	git submodule absorbgitdirs "$path"
 }
 
 prepare() {
-	ensure_env
 	local chronicle
 	chronicle="$(env_get CHRONICLE)"
 	[ -n "$chronicle" ] || die "CHRONICLE is not set in .env"
-	ensure_submodule "$chronicle"
-	ensure_chronicle_checked_out "$chronicle"
-	mkdir -p data/logs/login data/logs/game
+	provider_prepare "$chronicle"
+	local server
+	server="$(env_get SERVER)"
+	mkdir -p "data/logs/$server/login" "data/logs/$server/game" "overrides/$server"
+}
+
+stop_running() {
+	if docker compose ps -q 2>/dev/null | grep -q .; then
+		log "Stopping running $(env_get SERVER) $(env_get CHRONICLE)"
+		docker compose --profile tools down
+	fi
 }
 
 cmd_up() {
 	prepare
-	log "Building and starting $(env_get CHRONICLE)"
+	log "Building and starting $(env_get SERVER) $(env_get CHRONICLE)"
 	docker compose up -d --build "$@"
-	log "Login server: 127.0.0.1:$(env_get LOGIN_PORT), game server: 7777, client protocol: $(protocol_of "$(env_get CHRONICLE)")"
+	log "Login server: 127.0.0.1:$(env_get LOGIN_PORT), game server: 7777, client protocol: $(provider_protocol "$(env_get CHRONICLE)")"
 	log "Follow startup with: ./l2.sh logs game"
+}
+
+cmd_server() {
+	local name="${1:-}" current s
+	current="$(env_get SERVER)"
+	if [ -z "$name" ]; then
+		echo "Available servers (* current):"
+		while read -r s; do
+			if [ "$s" = "$current" ]; then echo "  * $s"; else echo "    $s"; fi
+		done < <(available_servers)
+		return
+	fi
+	[ -f "servers/$name/provider.sh" ] || die "Unknown server '$name'. List them with: ./l2.sh server"
+	[ "$name" = "$current" ] && { log "SERVER is already $name"; return; }
+	stop_running
+	env_set SERVER "$name"
+	select_server_compose "$name"
+	load_provider
+	env_set CHRONICLE "$PROVIDER_DEFAULT_CHRONICLE"
+	log "SERVER=$name, CHRONICLE=$PROVIDER_DEFAULT_CHRONICLE. Start it with: ./l2.sh up"
 }
 
 cmd_chronicle() {
@@ -99,39 +142,36 @@ cmd_chronicle() {
 		prepare
 		local current c
 		current="$(env_get CHRONICLE)"
-		echo "Available chronicles (* current):"
+		echo "Available chronicles of $(env_get SERVER) (* current):"
 		while read -r c; do
 			if [ "$c" = "$current" ]; then echo "  * $c"; else echo "    $c"; fi
-		done < <(available_chronicles)
-		echo "Current: $current (client protocol $(protocol_of "$current"))"
+		done < <(provider_chronicles)
+		echo "Current: $current (client protocol $(provider_protocol "$current"))"
 		return
 	fi
-	ensure_env
-	ensure_submodule "$name"
-	ensure_chronicle_checked_out "$name"
-	if docker compose ps -q 2>/dev/null | grep -q .; then
-		log "Stopping running chronicle $(env_get CHRONICLE)"
-		docker compose --profile tools down
-	fi
+	provider_prepare "$name"
+	stop_running
 	env_set CHRONICLE "$name"
-	log "CHRONICLE=$name (client protocol $(protocol_of "$name")). Start it with: ./l2.sh up"
+	log "CHRONICLE=$name (client protocol $(provider_protocol "$name")). Start it with: ./l2.sh up"
 }
 
 cmd_update() {
 	prepare
-	local before after
-	before="$(sub rev-parse HEAD)"
-	log "Fetching latest upstream master"
-	sub fetch --depth 1 --filter=blob:none origin master
-	sub checkout -q FETCH_HEAD
-	after="$(sub rev-parse HEAD)"
+	local name="$PROVIDER_SUBMODULE" path branch before after
+	path="$(submodule_path "$name")"
+	branch="$(git config -f .gitmodules "submodule.$name.branch" || echo master)"
+	before="$(sub "$name" rev-parse HEAD)"
+	log "Fetching latest upstream $branch"
+	sub "$name" fetch --depth 1 --filter=blob:none origin "$branch"
+	sub "$name" checkout -q FETCH_HEAD
+	after="$(sub "$name" rev-parse HEAD)"
 	if [ "$before" = "$after" ]; then
 		log "Already up to date (${after:0:10})"
 		return
 	fi
 	log "Submodule moved ${before:0:10} -> ${after:0:10}"
 	log "Rebuild with: ./l2.sh up"
-	log "Record it with: git add $SUBMODULE && git commit -m \"Update L2J_Mobius to ${after:0:10}\""
+	log "Record it with: git add $path && git commit -m \"Update $name to ${after:0:10}\""
 }
 
 # Runs SQL against the game database, prints tab-separated rows without headers
@@ -168,13 +208,14 @@ cmd_help() {
 	cat <<EOF
 Usage: ./l2.sh [command]
 
-  up [services]       Prepare submodule/.env, build and start (default)
+  up [services]       Prepare source/.env, build and start (default)
   down                Stop and remove containers (data volumes are kept)
   restart [service]   Restart services, e.g. after editing overrides/
   logs [service]      Follow logs (db, login, game)
   ps                  Show container status
-  chronicle [name]    List available chronicles or switch to one
-  update              Move the submodule to the latest upstream master
+  server [name]       List available servers or switch to one (e.g. l2jmobius)
+  chronicle [name]    List the current server's chronicles or switch to one
+  update              Move the server source to the latest upstream commit
   gm                  List characters with their access levels
   gm <login> [level]  Set the access level of an account's characters (default 100 = Master)
   tools               Start phpMyAdmin on http://localhost:\$PHPMYADMIN_PORT
@@ -185,15 +226,22 @@ command="${1:-up}"
 [ $# -gt 0 ] && shift
 
 case "$command" in
+	help | -h | --help) cmd_help; exit ;;
+esac
+
+ensure_env
+load_provider
+
+case "$command" in
 	up) cmd_up "$@" ;;
 	down) docker compose --profile tools down "$@" ;;
 	restart) docker compose restart "$@" ;;
 	logs) docker compose logs -f --tail=200 "$@" ;;
 	ps) docker compose ps "$@" ;;
+	server) cmd_server "$@" ;;
 	chronicle) cmd_chronicle "$@" ;;
 	update) cmd_update ;;
 	gm) cmd_gm "$@" ;;
 	tools) prepare && docker compose --profile tools up -d phpmyadmin ;;
-	help | -h | --help) cmd_help ;;
 	*) cmd_help; exit 1 ;;
 esac
