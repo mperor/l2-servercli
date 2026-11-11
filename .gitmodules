@@ -8,3 +8,28 @@
 	url = https://gitlab.com/Tryskell/acis_public.git
 	branch = master
 	shallow = true
+[submodule "l2j_login"]
+	path = sources/l2j/login
+	url = https://bitbucket.org/l2jserver/l2j-server-login.git
+	branch = master
+	shallow = true
+[submodule "l2j_highfive_game"]
+	path = sources/l2j/HighFive/game
+	url = https://bitbucket.org/l2jserver/l2j-server-game.git
+	branch = develop
+	shallow = true
+[submodule "l2j_highfive_datapack"]
+	path = sources/l2j/HighFive/datapack
+	url = https://bitbucket.org/l2jserver/l2j-server-datapack.git
+	branch = develop
+	shallow = true
+[submodule "l2j_interlude_game"]
+	path = sources/l2j/Interlude/game
+	url = https://bitbucket.org/l2jserver/l2j-server-game.git
+	branch = Interlude
+	shallow = true
+[submodule "l2j_interlude_datapack"]
+	path = sources/l2j/Interlude/datapack
+	url = https://bitbucket.org/l2jserver/l2j-server-datapack.git
+	branch = Interlude
+	shallow = true

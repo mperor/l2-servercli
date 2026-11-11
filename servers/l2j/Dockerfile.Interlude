@@ -1,0 +1,32 @@
+# Build context: sources/l2j/Interlude (game + datapack, Interlude branch). Extra contexts: "login" =
+# sources/l2j/login, "scripts" = servers/l2j. The Interlude branch has no login server of its own; the current
+# L2J login server accepts it (ServerVersions 6 = Interlude). The login server needs Java 25; the Interlude
+# game server targets Java 17 and runs on 25 as well, so one JDK serves both.
+
+FROM eclipse-temurin:25-jdk AS build
+
+WORKDIR /src
+COPY . .
+COPY --from=login . login
+# Maven downloads go to a BuildKit cache; jar (from the JDK) unpacks the distribution zips
+RUN --mount=type=cache,target=/root/.m2 \
+	set -e; \
+	for module in game login datapack; do \
+		sed -i 's/\r$//' "$module/mvnw" && chmod +x "$module/mvnw"; \
+	done; \
+	(cd game && ./mvnw -B -q package -DskipTests); \
+	(cd datapack && ./mvnw -B -q package -DskipTests); \
+	(cd login && ./mvnw -B -q package -DskipTests); \
+	mkdir -p /opt/l2/dist/game /opt/l2/dist/login; \
+	(cd /opt/l2/dist/game && jar xf /src/game/target/*.zip && jar xf /src/datapack/target/*.zip); \
+	(cd /opt/l2/dist/login && jar xf /src/login/target/*.zip)
+
+FROM eclipse-temurin:25-jdk
+
+COPY --from=build /opt/l2/dist /opt/l2/dist
+COPY --from=scripts entrypoint.sh /usr/local/bin/entrypoint.sh
+# Guard against CRLF line endings from a Windows checkout
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh && chmod +x /usr/local/bin/entrypoint.sh
+
+WORKDIR /opt/l2/dist
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

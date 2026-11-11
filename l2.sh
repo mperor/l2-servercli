@@ -102,7 +102,12 @@ ensure_submodule() {
 	if [ $# -gt 0 ]; then
 		sub "$name" sparse-checkout set --cone "$@"
 	fi
-	sub "$name" fetch --depth 1 --filter=blob:none origin "$sha"
+	# Fetching a commit by id is not allowed by every host; the branch from .gitmodules is the fallback
+	if ! sub "$name" fetch -q --depth 1 --filter=blob:none origin "$sha" 2> /dev/null; then
+		local branch
+		branch="$(git config -f .gitmodules "submodule.$name.branch" || echo master)"
+		sub "$name" fetch -q --filter=blob:none --shallow-since=2000-01-01 origin "$branch"
+	fi
 	sub "$name" checkout -q "$sha"
 	git submodule init "$path"
 	git submodule absorbgitdirs "$path"
@@ -174,7 +179,9 @@ cmd_status() {
 	printf '%s  %s   (project %s)\n\n' "$PROVIDER_NAME" "$chronicle" "$project"
 	local protocol
 	protocol="$(provider_protocol "$chronicle")"
-	if [[ "$protocol" == *[,\;]* ]]; then
+	if [[ "$protocol" == *-* ]]; then
+		status_row "Client protocol" "$protocol (the game client must use a revision in this range)"
+	elif [[ "$protocol" == *[,\;]* ]]; then
 		status_row "Client protocol" "$protocol (the game client must use one of these revisions)"
 	else
 		status_row "Client protocol" "${protocol:-unknown} (the game client must use this revision)"
@@ -314,21 +321,32 @@ cmd_chronicle() {
 
 cmd_update() {
 	prepare
-	local name="$PROVIDER_SUBMODULE" path branch before after
-	path="$(submodule_path "$name")"
-	branch="$(git config -f .gitmodules "submodule.$name.branch" || echo master)"
-	before="$(sub "$name" rev-parse HEAD)"
-	log "Fetching latest upstream $branch"
-	sub "$name" fetch --depth 1 --filter=blob:none origin "$branch"
-	sub "$name" checkout -q FETCH_HEAD
-	after="$(sub "$name" rev-parse HEAD)"
-	if [ "$before" = "$after" ]; then
-		log "Already up to date (${after:0:10})"
-		return
+	local name path branch before after moved=()
+	# A server can consist of several repositories (provider_submodules), most have one
+	local names
+	if declare -F provider_submodules > /dev/null; then
+		names="$(provider_submodules "$(env_get CHRONICLE)")"
+	else
+		names="$PROVIDER_SUBMODULE"
 	fi
-	log "Submodule moved ${before:0:10} -> ${after:0:10}"
+	for name in $names; do
+		path="$(submodule_path "$name")"
+		branch="$(git config -f .gitmodules "submodule.$name.branch" || echo master)"
+		before="$(sub "$name" rev-parse HEAD)"
+		log "Fetching latest upstream $branch of $path"
+		sub "$name" fetch --depth 1 --filter=blob:none origin "$branch"
+		sub "$name" checkout -q FETCH_HEAD
+		after="$(sub "$name" rev-parse HEAD)"
+		if [ "$before" = "$after" ]; then
+			log "$path is up to date (${after:0:10})"
+		else
+			log "$path moved ${before:0:10} -> ${after:0:10}"
+			moved+=("$path")
+		fi
+	done
+	[ ${#moved[@]} -gt 0 ] || return 0
 	log "Rebuild with: $CLI up"
-	log "Record it with: git add $path && git commit -m \"Update $name to ${after:0:10}\""
+	log "Record it with: git add ${moved[*]} && git commit -m \"Update $PROVIDER_NAME\""
 }
 
 # Runs SQL against the game database, prints tab-separated rows without headers

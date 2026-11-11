@@ -1,0 +1,34 @@
+# L2J Server part of the stack, merged over docker-compose.yml (paths are relative to the repository root).
+# The build context is the chronicle's sources/l2j/<CHRONICLE> (game + datapack); the login server, shared by
+# all chronicles, is the extra build context "login".
+x-build: &build
+  image: l2-l2j:${CHRONICLE:?set CHRONICLE in .env}
+  build:
+    context: ./sources/l2j/${CHRONICLE}
+    dockerfile: ../../../servers/l2j/Dockerfile.${CHRONICLE}
+    additional_contexts:
+      login: ./sources/l2j/login
+      scripts: ./servers/l2j
+
+x-db-name: &db-name
+  MARIADB_DATABASE: l2jserver
+
+services:
+  db:
+    environment: *db-name
+    volumes:
+      - ./servers/l2j/initdb.sh:/docker-entrypoint-initdb.d/initdb.sh:ro
+      - ./sources/l2j/login/src/main/resources/sql:/l2-sql/login:ro
+      - ./sources/l2j/${CHRONICLE}/datapack/src/main/resources/sql:/l2-sql/game:ro
+
+  login:
+    <<: *build
+    environment: *db-name
+    volumes:
+      - ./data/logs/l2j/login:/opt/l2/dist/login/logs
+
+  game:
+    <<: *build
+    environment: *db-name
+    volumes:
+      - ./data/logs/l2j/game:/opt/l2/dist/game/logs

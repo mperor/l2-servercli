@@ -1,0 +1,32 @@
+# Build context: sources/l2j/HighFive (game + datapack, develop). Extra contexts: "login" = sources/l2j/login,
+# "scripts" = servers/l2j. Same steps as L2J's own l2j-server-game-docker / l2j-server-login-docker images.
+
+FROM eclipse-temurin:25-jdk AS build
+
+WORKDIR /src
+COPY . .
+COPY --from=login . login
+# The datapack build depends on the game artifact, hence "install" for the game. Maven downloads go to a
+# BuildKit cache, so rebuilds do not fetch them again. jar (from the JDK) unpacks the distribution zips.
+RUN --mount=type=cache,target=/root/.m2 \
+	set -e; \
+	for module in game login datapack; do \
+		sed -i 's/\r$//' "$module/mvnw" && chmod +x "$module/mvnw"; \
+	done; \
+	(cd game && ./mvnw -B -q install -DskipTests); \
+	(cd datapack && ./mvnw -B -q package -DskipTests); \
+	(cd login && ./mvnw -B -q package -DskipTests); \
+	mkdir -p /opt/l2/dist/game /opt/l2/dist/login; \
+	(cd /opt/l2/dist/game && jar xf /src/game/target/*.zip && jar xf /src/datapack/target/*.zip); \
+	(cd /opt/l2/dist/login && jar xf /src/login/target/*.zip)
+
+# JDK, not JRE: the game server compiles its datapack scripts at runtime
+FROM eclipse-temurin:25-jdk
+
+COPY --from=build /opt/l2/dist /opt/l2/dist
+COPY --from=scripts entrypoint.sh /usr/local/bin/entrypoint.sh
+# Guard against CRLF line endings from a Windows checkout
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh && chmod +x /usr/local/bin/entrypoint.sh
+
+WORKDIR /opt/l2/dist
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
