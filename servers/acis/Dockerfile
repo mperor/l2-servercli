@@ -17,13 +17,26 @@ RUN echo "${ANT_SHA512}  /tmp/ant.tar.gz" | sha512sum -c - \
 WORKDIR /src
 COPY . .
 
-# The one source change: for clients with a private IP the login server sends the game server's
-# connection address instead of its Hostname. Behind Docker's NAT every client has a private IP, and the
-# connection address is the container's, unreachable from the host. The login server always sends
-# Hostname (= EXTERNAL_HOST) instead. The build fails if upstream changes this line.
+# Two source changes; the build fails if upstream changes the patched lines.
+# 1. For clients with a private IP the login server sends the game server's connection address instead of
+#    its Hostname. Behind Docker's NAT every client has a private IP, and the connection address is the
+#    container's, unreachable from the host. The login server always sends Hostname (= EXTERNAL_HOST) instead.
 ARG SERVERLIST=aCis_gameserver/java/net/sf/l2j/loginserver/network/serverpackets/ServerList.java
 RUN grep -q 'isLocalIp(account.getClientIp()) && ' "$SERVERLIST" \
 	&& sed -i 's/isLocalIp(account.getClientIp()) && /false \&\& /' "$SERVERLIST"
+
+# 2. Without geodata every move is rejected (null blocks report height 0, which never matches the target).
+#    Movement starting where no geodata is loaded is allowed as is, without obstacles; regions with
+#    geodata behave as upstream.
+ARG GEOENGINE=aCis_gameserver/java/net/sf/l2j/gameserver/geoengine/GeoEngine.java
+ARG CANMOVE='public final boolean canMove(int ox, int oy, int oz, int tx, int ty, int tz, ExServerPrimitive debug)'
+ARG VALIDLOC='public final Location getValidLocation(int ox, int oy, int oz, int tx, int ty, int tz, ExServerPrimitive debug)'
+RUN grep -qF "$CANMOVE" "$GEOENGINE" && grep -qF "$VALIDLOC" "$GEOENGINE" \
+	&& sed -i \
+		-e "/$CANMOVE/{n;s/\$/ if (!hasGeo(ox, oy)) return !World.isOutOfWorld(tx, ty);/}" \
+		-e "/$VALIDLOC/{n;s/\$/ if (!hasGeo(ox, oy)) return new Location(tx, ty, tz);/}" \
+		"$GEOENGINE" \
+	&& [ "$(grep -c 'if (!hasGeo(ox, oy))' "$GEOENGINE")" = 2 ]
 
 RUN ant -f aCis_gameserver/build.xml dist \
 	&& ant -f aCis_datapack/build.xml build \

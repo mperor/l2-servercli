@@ -71,11 +71,15 @@ setting `COMPOSE_FILE` in `.env`, so plain `docker compose ...` commands work as
   (= `EXTERNAL_HOST`) and the login's `AcceptNewGameServer = True` are always set from `.env`.
 - The game server's registration (`config/hexid.txt`) is generated on the first start and kept in the
   `l2-state-acis-Interlude` volume; no `RegisterGameServer` step is needed.
-- The public repository has no geodata, so the server starts without it (no line of sight or
-  pathfinding). Put the region files into `overrides/acis/game/data/geodata/` to use them.
-- One source change is applied at build time: the login server normally sends clients with a private IP
-  the game server's container address, which is unreachable behind Docker's NAT; here it always sends
-  `Hostname`.
+- **Geodata** (Interlude region files, `XX_YY_conv.dat` or `XX_YY.l2j`) is not part of the aCis
+  repository and has to be obtained separately. Put the files into `geodata/acis/` (git-ignored, mounted
+  into the game server) and run `./l2.sh restart game`; the format is detected from the file names and
+  only regions with a file are loaded. Without geodata characters and monsters move without obstacles
+  (through walls, no pathfinding).
+- Two source changes are applied at build time (the build fails if upstream changes those lines):
+  the login server always sends `Hostname`, because behind Docker's NAT every client has a private IP and
+  would otherwise get the game server's container address; and movement is allowed where no geodata is
+  loaded, which upstream rejects completely.
 - GM: `./l2.sh gm <login>` sets level `8` (Master, see `aCis_datapack/data/xml/accessLevels.xml`).
 
 ## Chronicles
@@ -149,6 +153,7 @@ sources/l2j_mobius/              submodule: MobiusDevelopment/L2J_Mobius (sparse
 sources/acis/                    submodule: Tryskell/acis_public (shallow)
 overrides/<server>/              your config overrides
 data/logs/<server>/              server logs (git-ignored)
+geodata/acis/                    aCis geodata region files, if you have them (git-ignored)
 ```
 
 ## Updating a server

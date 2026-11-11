@@ -23,6 +23,9 @@ services:
     <<: *build
     volumes:
       - ./data/logs/acis/game:/opt/l2/dist/game/log
+      # Region files (*_conv.dat or *.l2j), not part of the aCis repository; empty means no geodata.
+      # Writable: aCis saves geo_bugs.txt there
+      - ./geodata/acis:/opt/l2/dist/game/data/geodata
 
 volumes:
   db-data:

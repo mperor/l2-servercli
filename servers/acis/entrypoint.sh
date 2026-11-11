@@ -43,12 +43,31 @@ else
 	# Sent to clients by the login server; "*" would be the container's own address
 	props_set "$CFG/$CONF" Hostname "${EXTERNAL_HOST:-127.0.0.1}"
 
-	# The public repository ships no geodata, and aCis exits if a region listed in geoengine.properties is
-	# missing. Without region files the list is dropped, so the server runs without geodata (no line of sight
-	# or pathfinding). Region files placed in overrides/acis/game/data/geodata/ are used as listed.
-	if ! ls "$DIR/data/geodata" | grep -q -E '^[0-9]+_[0-9]+'; then
-		echo "No geodata in data/geodata, starting without it"
-		sed -i -E '/^[0-9]+_[0-9]+[[:space:]]*(=.*)?$/d' "$CFG/geoengine.properties"
+	# Geodata is not in the aCis repository; region files come from geodata/acis/ on the host. The format
+	# follows the file names, and only regions with a file stay listed, because aCis exits on a listed
+	# region that is missing. Regions without geodata allow movement without obstacles (Dockerfile patch).
+	# The list is filtered from the image's original, so adding files and restarting picks them up.
+	GEO_CFG="$CFG/geoengine.properties"
+	[ -f "$GEO_CFG.orig" ] || cp "$GEO_CFG" "$GEO_CFG.orig"
+	cp "$GEO_CFG.orig" "$GEO_CFG"
+	geo_type=L2OFF geo_suffix=_conv.dat
+	if ls "$DIR/data/geodata" | grep -q -E '^[0-9]+_[0-9]+\.l2j$'; then
+		geo_type=L2J geo_suffix=.l2j
+	fi
+	props_set "$GEO_CFG" GeoDataType "$geo_type"
+	geo_regions=0
+	while IFS= read -r line; do
+		if [[ "$line" =~ ^([0-9]+_[0-9]+) ]]; then
+			[ -f "$DIR/data/geodata/${BASH_REMATCH[1]}$geo_suffix" ] || continue
+			geo_regions=$((geo_regions + 1))
+		fi
+		printf '%s\n' "$line"
+	done < "$GEO_CFG" > "$GEO_CFG.new"
+	mv "$GEO_CFG.new" "$GEO_CFG"
+	if [ "$geo_regions" = 0 ]; then
+		echo "No geodata in geodata/acis/: moving without obstacles"
+	else
+		echo "Geodata: $geo_regions $geo_type region files"
 	fi
 
 	# aCis refuses to start without config/hexid.txt (normally made by RegisterGameServer on the login side).

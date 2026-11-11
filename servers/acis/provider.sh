@@ -9,6 +9,7 @@ PROVIDER_ACCESS_LEVELS=aCis_datapack/data/xml/accessLevels.xml
 provider_prepare() {
 	[ "$1" = Interlude ] || die "aCis only runs Interlude (CHRONICLE=Interlude)"
 	ensure_submodule "$PROVIDER_SUBMODULE"
+	mkdir -p geodata/acis
 }
 
 provider_chronicles() { echo Interlude; }
