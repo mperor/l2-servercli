@@ -6,7 +6,6 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 SUBMODULE=l2j_mobius
-SUPPORTED_CHRONICLES="L2J_Mobius_C1_HarbingersOfWar L2J_Mobius_C4_ScionsOfDestiny L2J_Mobius_CT_0_Interlude"
 
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31mError:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -59,11 +58,19 @@ ensure_submodule() {
 	git submodule absorbgitdirs "$SUBMODULE"
 }
 
+# Lists every chronicle directory in the submodule commit (works without checking them out)
+available_chronicles() { sub ls-tree -d --name-only HEAD | grep '^L2J_Mobius_'; }
+
+# Client protocol revision the chronicle's game server accepts
+protocol_of() {
+	sed -n 's/^AllowedProtocolRevisions *= *//p' "$SUBMODULE/$1/dist/game/config/Server.ini" 2>/dev/null | tr -d '\r'
+}
+
 ensure_chronicle_checked_out() {
 	local chronicle="$1"
 	[ -d "$SUBMODULE/$chronicle" ] && return
-	sub ls-tree -d --name-only HEAD | grep -qx "$chronicle" \
-		|| die "Unknown chronicle '$chronicle'. Available: $(sub ls-tree -d --name-only HEAD | grep '^L2J_' | tr '\n' ' ')"
+	available_chronicles | grep -qx "$chronicle" \
+		|| die "Unknown chronicle '$chronicle'. List them with: ./l2.sh chronicle"
 	log "Adding $chronicle to sparse checkout"
 	sub sparse-checkout add "$chronicle"
 }
@@ -82,31 +89,32 @@ cmd_up() {
 	prepare
 	log "Building and starting $(env_get CHRONICLE)"
 	docker compose up -d --build "$@"
-	log "Login server: 127.0.0.1:$(env_get LOGIN_PORT), game server: 7777"
+	log "Login server: 127.0.0.1:$(env_get LOGIN_PORT), game server: 7777, client protocol: $(protocol_of "$(env_get CHRONICLE)")"
 	log "Follow startup with: ./l2.sh logs game"
 }
 
 cmd_chronicle() {
 	local name="${1:-}"
 	if [ -z "$name" ]; then
-		echo "Supported: $SUPPORTED_CHRONICLES"
-		ensure_env
-		echo "Current:   $(env_get CHRONICLE)"
+		prepare
+		local current c
+		current="$(env_get CHRONICLE)"
+		echo "Available chronicles (* current):"
+		while read -r c; do
+			if [ "$c" = "$current" ]; then echo "  * $c"; else echo "    $c"; fi
+		done < <(available_chronicles)
+		echo "Current: $current (client protocol $(protocol_of "$current"))"
 		return
 	fi
-	case " $SUPPORTED_CHRONICLES " in
-		*" $name "*) ;;
-		*) log "Warning: $name is not one of the tested chronicles ($SUPPORTED_CHRONICLES)" ;;
-	esac
 	ensure_env
 	ensure_submodule "$name"
 	ensure_chronicle_checked_out "$name"
 	if docker compose ps -q 2>/dev/null | grep -q .; then
 		log "Stopping running chronicle $(env_get CHRONICLE)"
-		docker compose down
+		docker compose --profile tools down
 	fi
 	env_set CHRONICLE "$name"
-	log "CHRONICLE=$name. Start it with: ./l2.sh up"
+	log "CHRONICLE=$name (client protocol $(protocol_of "$name")). Start it with: ./l2.sh up"
 }
 
 cmd_update() {
@@ -126,8 +134,34 @@ cmd_update() {
 	log "Record it with: git add $SUBMODULE && git commit -m \"Update L2J_Mobius to ${after:0:10}\""
 }
 
-cmd_account() {
-	docker compose exec login sh -c 'cd /opt/l2/dist/login && java -Djava.util.logging.config.file=console.cfg -cp "../libs/*" org.l2jmobius.tools.AccountManager'
+# Runs SQL against the game database, prints tab-separated rows without headers
+db_query() {
+	docker compose exec -T db sh -c 'mariadb -N -B -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"' <<< "$1" | tr -d '\r'
+}
+
+# AccountManager cannot run in the container (it extends JFrame, which fails without a display even in
+# console mode), so accounts come from AutoCreateAccounts and the access level is set directly in the database.
+# The game reads it from characters.accesslevel, not from accounts.
+cmd_gm() {
+	if [ $# -eq 0 ]; then
+		printf '%-20s %-20s %6s %s\n' ACCOUNT CHARACTER LEVEL ONLINE
+		db_query "SELECT account_name, char_name, accesslevel, IF(online = 1, 'yes', 'no') FROM characters ORDER BY account_name, char_name;" \
+			| awk -F'\t' '{ printf "%-20s %-20s %6s %s\n", $1, $2, $3, $4 }'
+		return
+	fi
+
+	local login="$1" level="${2:-100}"
+	[[ "$login" =~ ^[A-Za-z0-9_-]+$ ]] || die "Usage: ./l2.sh gm <login> [level]  (levels in AccessLevels.xml, default 100 = Master)"
+	[[ "$level" =~ ^-?[0-9]+$ ]] || die "Level must be a number"
+
+	local online count
+	online="$(db_query "SELECT COUNT(*) FROM characters WHERE account_name = '$login' AND online = 1;")"
+	[ "$online" = 0 ] || die "A character of $login is online; log out first (the game saves the access level on logout)"
+
+	count="$(db_query "UPDATE characters SET accesslevel = $level WHERE account_name = '$login';
+		SELECT COUNT(*) FROM characters WHERE account_name = '$login';")"
+	[ "$count" != 0 ] || die "No characters on account $login; log in with the client, create a character and run this again"
+	log "Set access level $level on $count character(s) of $login"
 }
 
 cmd_help() {
@@ -139,9 +173,10 @@ Usage: ./l2.sh [command]
   restart [service]   Restart services, e.g. after editing overrides/
   logs [service]      Follow logs (db, login, game)
   ps                  Show container status
-  chronicle [name]    Show or switch the chronicle
+  chronicle [name]    List available chronicles or switch to one
   update              Move the submodule to the latest upstream master
-  account             Run the interactive AccountManager
+  gm                  List characters with their access levels
+  gm <login> [level]  Set the access level of an account's characters (default 100 = Master)
   tools               Start phpMyAdmin on http://localhost:\$PHPMYADMIN_PORT
 EOF
 }
@@ -151,13 +186,13 @@ command="${1:-up}"
 
 case "$command" in
 	up) cmd_up "$@" ;;
-	down) docker compose down "$@" ;;
+	down) docker compose --profile tools down "$@" ;;
 	restart) docker compose restart "$@" ;;
 	logs) docker compose logs -f --tail=200 "$@" ;;
 	ps) docker compose ps "$@" ;;
 	chronicle) cmd_chronicle "$@" ;;
 	update) cmd_update ;;
-	account) cmd_account ;;
+	gm) cmd_gm "$@" ;;
 	tools) prepare && docker compose --profile tools up -d phpmyadmin ;;
 	help | -h | --help) cmd_help ;;
 	*) cmd_help; exit 1 ;;

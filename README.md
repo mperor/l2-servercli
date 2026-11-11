@@ -1,6 +1,6 @@
 # L2jMobius Docker
 
-Run an [L2jMobius](https://l2jmobius.org/) server (C1 Harbingers of War, C4 Scions of Destiny, C6 Interlude)
+Run an [L2jMobius](https://l2jmobius.org/) server (any chronicle of the monorepo, e.g. C6 Interlude)
 with a single command. The server source is pulled in as a git submodule from the official
 [GitLab repository](https://gitlab.com/MobiusDevelopment/L2J_Mobius), built inside Docker (Java 27),
 and started together with MariaDB.
@@ -27,8 +27,7 @@ On the first run `l2.sh`:
 3. builds the server image and starts `db`, `login` and `game`.
 
 The first start imports the SQL schema; afterwards the game server is ready in about 15 seconds.
-Point your client to `127.0.0.1` (login port `2106`). Accounts are created automatically on first login
-(`AutoCreateAccounts = True`).
+Then connect a game client, see [Connecting a client](#connecting-a-client).
 
 ## Commands
 
@@ -39,22 +38,54 @@ Point your client to `127.0.0.1` (login port `2106`). Accounts are created autom
 | `./l2.sh restart game` | Restart a service, e.g. after editing `overrides/` |
 | `./l2.sh logs game` | Follow logs of `db`, `login` or `game` |
 | `./l2.sh ps` | Container status |
-| `./l2.sh chronicle [name]` | Show or switch the chronicle |
+| `./l2.sh chronicle [name]` | List available chronicles or switch to one |
 | `./l2.sh update` | Move the submodule to the latest upstream `master` |
-| `./l2.sh account` | Interactive AccountManager (e.g. to set access level) |
+| `./l2.sh gm` | List characters with their access levels |
+| `./l2.sh gm <login> [level]` | Set the access level of an account's characters (default `100` = Master) |
 | `./l2.sh tools` | Start phpMyAdmin on http://localhost:8080 |
 
 ## Chronicles
 
-Set with `./l2.sh chronicle <name>` (stops the running one, then run `./l2.sh up`):
+Any `L2J_Mobius_*` directory of the upstream repository can be selected. `./l2.sh chronicle` lists
+them all; switch with `./l2.sh chronicle <name>` (stops the running one, then run `./l2.sh up`).
+Only the selected chronicle is downloaded.
 
-- `L2J_Mobius_C1_HarbingersOfWar`
-- `L2J_Mobius_C4_ScionsOfDestiny`
-- `L2J_Mobius_CT_0_Interlude` (default)
-
+The default, used as the example throughout this README, is `L2J_Mobius_CT_0_Interlude`.
 Each chronicle gets its own image tag (`l2jmobius:<chronicle>`) and its own database volume
 (`l2jmobius-db-<chronicle>`), so switching back and forth keeps characters intact.
-Other chronicles from the upstream repository may work too, but they are not tested here.
+
+## Connecting a client
+
+A game client is not included; use your own client of the selected chronicle.
+
+1. **Matching protocol.** The game server accepts only the protocol revision in the chronicle's
+   `dist/game/config/Server.ini` (`AllowedProtocolRevisions`; e.g. `746` for Interlude, `419` for C1).
+   `./l2.sh chronicle` and `./l2.sh up` print it. With a mismatch the login works, but the connection
+   drops after selecting the server.
+2. **Login address.** The client must connect to `127.0.0.1:2106` instead of the official login server.
+   The address is `ServerAddr` in `system/l2.ini`, which is encrypted in original clients. Either
+   - use a system patch for your chronicle with a plain `l2.ini` and set `ServerAddr=127.0.0.1`, or
+   - decrypt and re-encrypt `l2.ini` with `l2encdec` (`l2encdec -s l2.ini`, edit `dec-l2.ini`,
+     `l2encdec -e 413 dec-l2.ini`, rename `enc-l2.ini` to `l2.ini`), or
+   - redirect the login host name from `l2.ini` to `127.0.0.1` in the `hosts` file
+     (only works if `ServerAddr` is a host name, not an IP).
+
+   To see where the client really connects, run this in PowerShell while it tries to log in:
+   `Get-NetTCPConnection -OwningProcess (Get-Process l2).Id`.
+3. **Account.** Log in with any login and password; the account is created on first login
+   (`AutoCreateAccounts = True`). The login server then sends the client to `EXTERNAL_HOST:7777`.
+
+### GM access
+
+1. Log in, create a character and log out (the game saves the access level on logout and would
+   overwrite the change).
+2. `./l2.sh gm <login>` sets level `100` (Master) on all characters of the account; levels are defined
+   in `dist/game/config/AccessLevels.xml`.
+3. Check with `./l2.sh gm` (lists characters and levels), then log in and type `//admin` in the chat.
+   GMs start invisible and invulnerable (`GMStartup*` in `General.ini`); `//visible` shows you to others.
+
+The bundled `AccountManager` cannot be used: it opens a Swing window even in console mode, which fails
+in a container without a display.
 
 ## Configuration
 
