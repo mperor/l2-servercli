@@ -42,6 +42,7 @@ Then connect a game client, see [Connecting a client](#connecting-a-client).
 | `./l2.sh restart game` | Restart a service, e.g. after editing `overrides/` |
 | `./l2.sh logs game` | Follow logs of `db`, `login` or `game` |
 | `./l2.sh ps` | Container status |
+| `./l2.sh status` | Configured server and chronicle, container state, login registration and warnings (e.g. no geodata) |
 | `./l2.sh server [name]` | List available servers or switch to one |
 | `./l2.sh chronicle [name]` | List the current server's chronicles or switch to one |
 | `./l2.sh update` | Move the server submodule to the latest upstream commit |
@@ -82,11 +83,8 @@ chronicle's new volumes; the old volumes are not touched and can be deleted afte
   (= `EXTERNAL_HOST`) and the login's `AcceptNewGameServer = True` are always set from `.env`.
 - The game server's registration (`config/hexid.txt`) is generated on the first start and kept in the
   `l2-acis-interlude_game-state` volume; no `RegisterGameServer` step is needed. The database is `acis`.
-- **Geodata** (Interlude region files, `XX_YY_conv.dat` or `XX_YY.l2j`) is not part of the aCis
-  repository and has to be obtained separately. Put the files into `geodata/acis/` (git-ignored, mounted
-  into the game server) and run `./l2.sh restart game`; the format is detected from the file names and
-  only regions with a file are loaded. Without geodata characters and monsters move without obstacles
-  (through walls, no pathfinding).
+- Geodata (see [Configuration](#configuration)) can be `XX_YY_conv.dat` or `XX_YY.l2j`; the format is
+  detected from the file names and only regions with a file are loaded.
 - Two source changes are applied at build time (the build fails if upstream changes those lines):
   the login server always sends `Hostname`, because behind Docker's NAT every client has a private IP and
   would otherwise get the game server's container address; and movement is allowed where no geodata is
@@ -144,6 +142,11 @@ in a container without a display.
 - **`overrides/<server>/`** - your own versions of any file under `dist/game` or `dist/login`
   (e.g. `overrides/l2jmobius/game/config/Rates.ini`). They are copied over the defaults on every
   container start, so no rebuild is needed. See [overrides/README.md](overrides/README.md).
+- **`geodata/<server>/`** - geodata region files of the chronicle (terrain, walls, line of sight). They are
+  not part of the server repositories and have to be obtained separately (L2jMobius: `XX_YY.l2j`).
+  The directory is mounted into the game server; after adding files run `./l2.sh restart game`. Without
+  geodata characters and monsters move without obstacles (through walls, no pathfinding);
+  `./l2.sh up` and `./l2.sh status` warn about it.
 
 ### Playing from other machines
 
@@ -165,7 +168,7 @@ sources/l2j_mobius/              submodule: MobiusDevelopment/L2J_Mobius (sparse
 sources/acis/                    submodule: Tryskell/acis_public (shallow)
 overrides/<server>/              your config overrides
 data/logs/<server>/              server logs (git-ignored)
-geodata/acis/                    aCis geodata region files, if you have them (git-ignored)
+geodata/<server>/                geodata region files, if you have them (git-ignored)
 ```
 
 ## Updating a server

@@ -4,6 +4,8 @@
 #   PROVIDER_DEFAULT_CHRONICLE      CHRONICLE used when switching to this server
 #   PROVIDER_GM_LEVEL               characters.accesslevel of the Master level (./l2.sh gm default)
 #   PROVIDER_ACCESS_LEVELS          where the access levels are defined (shown in ./l2.sh gm usage)
+#   PROVIDER_GEODATA_FILES          regex for geodata region file names in geodata/<server>/
+#   PROVIDER_REGISTERED_LOG         game server log text once it is registered on the login server
 #   provider_prepare <chronicle>    makes the source of the chronicle available (dies if unknown)
 #   provider_chronicles             lists the chronicles this server can run
 #   provider_protocol <chronicle>   client protocol revision the game server accepts
@@ -14,6 +16,8 @@ PROVIDER_SUBMODULE=l2j_mobius
 PROVIDER_DEFAULT_CHRONICLE=L2J_Mobius_CT_0_Interlude
 PROVIDER_GM_LEVEL=100
 PROVIDER_ACCESS_LEVELS=dist/game/config/AccessLevels.xml
+PROVIDER_GEODATA_FILES='^[0-9]+_[0-9]+\.l2j$'
+PROVIDER_REGISTERED_LOG='Registered on login as Server'
 
 # The monorepo has ~40 chronicles; the sparse checkout holds only the ones used so far
 provider_prepare() {

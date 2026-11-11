@@ -6,6 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33mWarning:\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31mError:\033[0m %s\n' "$*" >&2; exit 1; }
 
 env_get() { sed -n "s/^$1=//p" .env | tail -n 1 | tr -d '\r'; }
@@ -111,7 +112,56 @@ prepare() {
 	provider_prepare "$chronicle"
 	local server
 	server="$(env_get SERVER)"
-	mkdir -p "data/logs/$server/login" "data/logs/$server/game" "overrides/$server"
+	mkdir -p "data/logs/$server/login" "data/logs/$server/game" "overrides/$server" "geodata/$server"
+}
+
+# One line naming the configured server, shown before commands act on it
+show_context() {
+	log "Server: $(env_get SERVER), chronicle: $(env_get CHRONICLE) (project $(env_get COMPOSE_PROJECT_NAME))"
+}
+
+# Other l2 projects with running containers (e.g. the previous server before ./l2.sh up)
+running_other_projects() {
+	docker ps --format '{{.Label "com.docker.compose.project"}}' 2>/dev/null | grep -E '^(l2-|l2jmobius$)' | sort -u \
+		| grep -vx "$(env_get COMPOSE_PROJECT_NAME)" || true
+}
+
+# Things that work differently than one might expect for this setup
+show_notes() {
+	local server count p
+	server="$(env_get SERVER)"
+	count="$(ls "geodata/$server" 2>/dev/null | grep -c -E "$PROVIDER_GEODATA_FILES" || true)"
+	if [ "$count" = 0 ]; then
+		warn "No geodata in geodata/$server/: characters and monsters move without obstacles (through walls, no pathfinding)"
+	else
+		log "Geodata: $count region files in geodata/$server/"
+	fi
+	while read -r p; do
+		[ -n "$p" ] && warn "Project $p is running, not the configured one; ./l2.sh up replaces it"
+	done < <(running_other_projects)
+}
+
+service_state() { docker compose ps -a --format '{{.Status}}' "$1" 2>/dev/null | head -n 1; }
+
+cmd_status() {
+	local chronicle server state s
+	chronicle="$(env_get CHRONICLE)"
+	server="$(env_get SERVER)"
+	printf '%-11s %s\n' Server: "$server" Chronicle: "$chronicle" \
+		Protocol: "$(provider_protocol "$chronicle")" Project: "$(env_get COMPOSE_PROJECT_NAME)" \
+		Address: "login 127.0.0.1:$(env_get LOGIN_PORT), clients are sent to $(env_get EXTERNAL_HOST):7777"
+	for s in db login game; do
+		state="$(service_state "$s")"
+		printf '%-11s %s\n' "$s:" "${state:-not created}"
+	done
+	if docker compose ps --status running -q game 2>/dev/null | grep -q .; then
+		if docker compose logs --no-log-prefix game 2>/dev/null | grep -q "$PROVIDER_REGISTERED_LOG"; then
+			printf '%-11s %s\n' Login: "game server registered, ready for clients"
+		else
+			printf '%-11s %s\n' Login: "game server not registered yet (starting? see ./l2.sh logs game)"
+		fi
+	fi
+	show_notes
 }
 
 stop_running() {
@@ -160,10 +210,12 @@ cmd_up() {
 	prepare
 	remove_other_projects
 	migrate_legacy_volumes
-	log "Building and starting $(env_get SERVER) $(env_get CHRONICLE) (project $(env_get COMPOSE_PROJECT_NAME))"
+	log "Building and starting"
 	docker compose up -d --build "$@"
+	show_context
 	log "Login server: 127.0.0.1:$(env_get LOGIN_PORT), game server: 7777, client protocol: $(provider_protocol "$(env_get CHRONICLE)")"
-	log "Follow startup with: ./l2.sh logs game"
+	show_notes
+	log "Follow startup with: ./l2.sh logs game (ready at \"$PROVIDER_REGISTERED_LOG\"), or check ./l2.sh status"
 }
 
 cmd_server() {
@@ -266,6 +318,7 @@ Usage: ./l2.sh [command]
   restart [service]   Restart services, e.g. after editing overrides/
   logs [service]      Follow logs (db, login, game)
   ps                  Show container status
+  status              Show the configured server and chronicle, its state and warnings (e.g. no geodata)
   server [name]       List available servers or switch to one (e.g. l2jmobius)
   chronicle [name]    List the current server's chronicles or switch to one
   update              Move the server source to the latest upstream commit
@@ -286,8 +339,14 @@ ensure_env
 load_provider
 sync_project
 
+# Commands acting on the stack first say which server and chronicle that is
+case "$command" in
+	up | down | restart | logs | ps | update | gm | tools) show_context ;;
+esac
+
 case "$command" in
 	up) cmd_up "$@" ;;
+	status) cmd_status ;;
 	down) docker compose --profile tools down "$@" ;;
 	restart) docker compose restart "$@" ;;
 	logs) docker compose logs -f --tail=200 "$@" ;;

@@ -58,6 +58,9 @@ services:
     volumes:
       - ./overrides/${SERVER}:/overrides:ro
       - game-state:/state
+      # Geodata region files, not part of the server repositories; empty means no geodata (see README).
+      # Writable: aCis saves geo_bugs.txt there
+      - ./geodata/${SERVER}:/opt/l2/dist/game/data/geodata
 
   phpmyadmin:
     image: phpmyadmin:5
