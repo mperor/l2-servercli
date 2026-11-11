@@ -91,4 +91,7 @@ type `//admin` in the game chat.
   rewritten for the current L2jMobius layout and generalised to several server emulators.
 - L2jMobius and L2J Server are licensed under the GNU GPL v3; see the upstream repositories. The public
   aCis repository ships no license file; see its project page.
-- This repository's own files may be used under the same terms as the original (WTFPL).
+- This repository's own files are licensed under the [MIT License](LICENSE). The server sources are not
+  part of it; they are downloaded from their upstream repositories under their own licenses.
+- Not affiliated with or endorsed by NCSOFT. Lineage II is a trademark of NCSOFT Corporation. This project
+  contains no game client or game files; it only builds and runs open-source server emulators.
