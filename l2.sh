@@ -362,7 +362,20 @@ cmd_gm() {
 	log "Set access level $level on $count character(s) of $login"
 }
 
+# figlet -f smslant "L2 Quickstart"; only on a terminal, so redirected output stays plain
+show_banner() {
+	[ -t 1 ] || return 0
+	cat <<'EOF'
+   __   ___    ____       _     __        __           __
+  / /  |_  |  / __ \__ __(_)___/ /__ ___ / /____ _____/ /_
+ / /__/ __/  / /_/ / // / / __/  '_/(_-</ __/ _ `/ __/ __/
+/____/____/  \___\_\_,_/_/\__/_/\_\/___/\__/\_,_/_/  \__/
+
+EOF
+}
+
 cmd_help() {
+	show_banner
 	cat <<EOF
 Usage: $CLI [command]   (without a command: status)
 
