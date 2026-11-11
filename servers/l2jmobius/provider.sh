@@ -1,5 +1,6 @@
 # L2jMobius provider for l2.sh (sourced, not executed).
 # A provider defines:
+#   PROVIDER_NAME                   display name (read with sed by l2.sh status for other servers, keep it plain)
 #   PROVIDER_SUBMODULE              submodule name in .gitmodules holding the server source
 #   PROVIDER_DEFAULT_CHRONICLE      CHRONICLE used when switching to this server
 #   PROVIDER_GM_LEVEL               characters.accesslevel of the Master level (./l2.sh gm default)
@@ -12,6 +13,7 @@
 #   provider_slug <chronicle>       short chronicle name for the compose project (l2-<server>-<slug>)
 #   provider_legacy_volumes <chr>   "<volume key> <old volume name>" lines to copy once into the project
 
+PROVIDER_NAME=L2jMobius
 PROVIDER_SUBMODULE=l2j_mobius
 PROVIDER_DEFAULT_CHRONICLE=L2J_Mobius_CT_0_Interlude
 PROVIDER_GM_LEVEL=100

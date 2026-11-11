@@ -43,17 +43,19 @@ Then connect a game client, see [Connecting a client](#connecting-a-client).
 | `./l2.sh logs game` | Follow logs of `db`, `login` or `game` |
 | `./l2.sh ps` | Container status |
 | `./l2.sh status` | Configured server and chronicle, container state, login registration, warnings (e.g. no geodata) and the next step; also `./l2.sh` without a command |
-| `./l2.sh server [name]` | List available servers or switch to one |
+| `./l2.sh server [name [chronicle]]` | List available servers or switch to one, optionally with a chronicle |
+| `./l2.sh <server> [chronicle]` | Shortcut for the above, e.g. `./l2.sh acis` or `./l2.sh l2jmobius L2J_Mobius_C1_HarbingersOfWar` |
 | `./l2.sh chronicle [name]` | List the current server's chronicles or switch to one |
 | `./l2.sh update` | Move the server submodule to the latest upstream commit |
 | `./l2.sh gm` | List characters with their access levels |
-| `./l2.sh gm <login> [level]` | Set the access level of an account's characters (default `100` = Master) |
+| `./l2.sh gm <login> [level]` | Set the access level of an account's characters (default: the server's Master level) |
 | `./l2.sh tools` | Start phpMyAdmin on http://localhost:8080 |
 
 ## Servers
 
-`./l2.sh server` lists the servers in `servers/`; switch with `./l2.sh server <name>` (stops the
-running one and selects the server's default chronicle, then run `./l2.sh up`).
+`./l2.sh server` lists the servers in `servers/`; switch with `./l2.sh <name>` (or `./l2.sh server <name>`;
+stops the running one and selects the server's default chronicle or the one given as second argument,
+then run `./l2.sh up`). `./l2.sh status` shows the other servers and how many chronicles the current one has.
 
 Every server and chronicle is its own compose project, `l2-<server>-<chronicle>`
 (e.g. `l2-acis-interlude`, `l2-l2jmobius-ct_0_interlude`), with its own containers, network,
@@ -74,7 +76,7 @@ chronicle's new volumes; the old volumes are not touched and can be deleted afte
 ### aCis
 
 ```bash
-./l2.sh server acis   # CHRONICLE=Interlude
+./l2.sh acis          # same as ./l2.sh server acis; CHRONICLE=Interlude
 ./l2.sh up            # game server ready when "./l2.sh logs game" shows "Registered as server"
 ```
 

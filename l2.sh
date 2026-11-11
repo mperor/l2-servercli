@@ -5,6 +5,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+# How the user calls this script (l2.ps1 sets .\l2.ps1), used in the commands it suggests
+CLI="${L2_CLI:-./l2.sh}"
+
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mWarning:\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31mError:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -39,7 +42,7 @@ ensure_env() {
 	fi
 	local server
 	server="$(env_get SERVER)"
-	[ -f "servers/$server/provider.sh" ] || die "Unknown SERVER '$server' in .env. List them with: ./l2.sh server"
+	[ -f "servers/$server/provider.sh" ] || die "Unknown SERVER '$server' in .env. List them with: $CLI server"
 	[ "$(env_get COMPOSE_FILE)" = "docker-compose.yml:servers/$server/compose.yml" ] || select_server_compose "$server"
 }
 
@@ -117,7 +120,7 @@ prepare() {
 
 # One line naming the configured server, shown before commands act on it
 show_context() {
-	log "Server: $(env_get SERVER), chronicle: $(env_get CHRONICLE) (project $(env_get COMPOSE_PROJECT_NAME))"
+	log "$PROVIDER_NAME $(env_get CHRONICLE) (project $(env_get COMPOSE_PROJECT_NAME))"
 }
 
 # Other l2 projects with running containers (e.g. the previous server before ./l2.sh up)
@@ -132,44 +135,83 @@ show_notes() {
 	server="$(env_get SERVER)"
 	count="$(ls "geodata/$server" 2>/dev/null | grep -c -E "$PROVIDER_GEODATA_FILES" || true)"
 	if [ "$count" = 0 ]; then
-		warn "No geodata in geodata/$server/: characters and monsters move without obstacles (through walls, no pathfinding)"
+		warn "no geodata in geodata/$server/ - characters and monsters walk through walls, no pathfinding"
 	else
 		log "Geodata: $count region files in geodata/$server/"
 	fi
 	while read -r p; do
-		[ -n "$p" ] && warn "Project $p is running, not the configured one; ./l2.sh up replaces it"
+		[ -n "$p" ] && warn "project $p is running, not this one; $CLI up replaces it"
 	done < <(running_other_projects)
 }
 
-service_state() { docker compose ps -a --format '{{.Status}}' "$1" 2>/dev/null | head -n 1; }
+# "db running (healthy), login running, game exited" for the services that exist, empty if none
+services_state() {
+	docker compose ps -a --format '{{.Service}} {{.State}} {{.Health}}' 2>/dev/null \
+		| awk '{ s[$1] = $1 " " $2 ($3 != "" ? " (" $3 ")" : "") }
+			END { n = split("db login game", order, " "); for (i = 1; i <= n; i++) if (order[i] in s) out = out (out ? ", " : "") s[order[i]]; print out }'
+}
+
+status_row() { printf '  %-16s %s\n' "$1" "$2"; }
+next_row() { printf '  %-32s %s\n' "$1" "$2"; }
 
 cmd_status() {
-	local chronicle server state s
+	local chronicle server project state ready=false starting=false
 	chronicle="$(env_get CHRONICLE)"
 	server="$(env_get SERVER)"
-	printf '%-11s %s\n' Server: "$server" Chronicle: "$chronicle" \
-		Protocol: "$(provider_protocol "$chronicle")" Project: "$(env_get COMPOSE_PROJECT_NAME)" \
-		Address: "login 127.0.0.1:$(env_get LOGIN_PORT), clients are sent to $(env_get EXTERNAL_HOST):7777"
-	for s in db login game; do
-		state="$(service_state "$s")"
-		printf '%-11s %s\n' "$s:" "${state:-not created}"
-	done
-	local next
+	project="$(env_get COMPOSE_PROJECT_NAME)"
+
+	state="$(services_state)"
 	if docker compose ps --status running -q game 2>/dev/null | grep -q .; then
 		if docker compose logs --no-log-prefix game 2>/dev/null | grep -q "$PROVIDER_REGISTERED_LOG"; then
-			printf '%-11s %s\n' Login: "game server registered, ready for clients"
-			next="Connect a client to 127.0.0.1:$(env_get LOGIN_PORT) (see README, Connecting a client)"
+			ready=true
+			state="$state - registered on login, ready"
 		else
-			printf '%-11s %s\n' Login: "game server not registered yet"
-			next="Follow startup with: ./l2.sh logs game"
+			starting=true
+			state="$state - not registered on login yet"
 		fi
-	elif [ -n "$(running_other_projects)" ]; then
-		next="Start it with: ./l2.sh up (replaces the running project)"
-	else
-		next="Start it with: ./l2.sh up"
 	fi
+
+	printf '%s  %s   (project %s)\n\n' "$PROVIDER_NAME" "$chronicle" "$project"
+	local protocol
+	protocol="$(provider_protocol "$chronicle")"
+	if [[ "$protocol" == *[,\;]* ]]; then
+		status_row "Client protocol" "$protocol (the game client must use one of these revisions)"
+	else
+		status_row "Client protocol" "${protocol:-unknown} (the game client must use this revision)"
+	fi
+	status_row Login "127.0.0.1:$(env_get LOGIN_PORT) (the address to set in the client)"
+	status_row Game "$(env_get EXTERNAL_HOST):7777 (the login server sends clients here: EXTERNAL_HOST in .env)"
+	status_row State "${state:-not running}"
+	echo
 	show_notes
-	log "$next"
+
+	echo
+	echo "Next:"
+	if $ready; then
+		next_row "connect a game client" "to 127.0.0.1:$(env_get LOGIN_PORT), see README \"Connecting a client\""
+		next_row "$CLI logs game" "follow the game server log"
+		next_row "$CLI down" "stop this server"
+	elif $starting; then
+		next_row "$CLI logs game" "follow the startup until \"$PROVIDER_REGISTERED_LOG\""
+		next_row "$CLI down" "stop this server"
+	else
+		next_row "$CLI up" "start this server"
+	fi
+	local count other
+	if [ -e "$(submodule_path "$PROVIDER_SUBMODULE")/.git" ]; then
+		count="$(provider_chronicles 2>/dev/null | grep -c . || true)"
+		if [ "$count" -gt 1 ]; then
+			next_row "$CLI chronicle" "list the $count chronicles"
+			next_row "$CLI chronicle <name>" "switch the chronicle"
+		else
+			next_row "$CLI chronicle" "list the chronicles ($count)"
+		fi
+	else
+		next_row "$CLI chronicle" "download the source and list the chronicles"
+	fi
+	while read -r other; do
+		next_row "$CLI $other [chronicle]" "switch to $(sed -n 's/^PROVIDER_NAME=//p' "servers/$other/provider.sh")"
+	done < <(available_servers | grep -vx "$server")
 }
 
 stop_running() {
@@ -220,10 +262,8 @@ cmd_up() {
 	migrate_legacy_volumes
 	log "Building and starting"
 	docker compose up -d --build "$@"
-	show_context
-	log "Login server: 127.0.0.1:$(env_get LOGIN_PORT), game server: 7777, client protocol: $(provider_protocol "$(env_get CHRONICLE)")"
-	show_notes
-	log "Follow startup with: ./l2.sh logs game (ready at \"$PROVIDER_REGISTERED_LOG\"), or check ./l2.sh status"
+	echo
+	cmd_status
 }
 
 cmd_server() {
@@ -236,15 +276,20 @@ cmd_server() {
 		done < <(available_servers)
 		return
 	fi
-	[ -f "servers/$name/provider.sh" ] || die "Unknown server '$name'. List them with: ./l2.sh server"
-	[ "$name" = "$current" ] && { log "SERVER is already $name"; return; }
-	stop_running
-	env_set SERVER "$name"
-	select_server_compose "$name"
-	load_provider
-	env_set CHRONICLE "$PROVIDER_DEFAULT_CHRONICLE"
-	sync_project
-	log "SERVER=$name, CHRONICLE=$PROVIDER_DEFAULT_CHRONICLE. Start it with: ./l2.sh up"
+	[ -f "servers/$name/provider.sh" ] || die "Unknown server '$name'. List them with: $CLI server"
+	local chronicle="${2:-}"
+	if [ "$name" = "$current" ]; then
+		[ -n "$chronicle" ] || { log "SERVER is already $name"; return; }
+	else
+		stop_running
+		env_set SERVER "$name"
+		select_server_compose "$name"
+		load_provider
+		env_set CHRONICLE "$PROVIDER_DEFAULT_CHRONICLE"
+		sync_project
+		[ -n "$chronicle" ] || { log "SERVER=$name, CHRONICLE=$PROVIDER_DEFAULT_CHRONICLE. Start it with: $CLI up"; return; }
+	fi
+	cmd_chronicle "$chronicle"
 }
 
 cmd_chronicle() {
@@ -264,7 +309,7 @@ cmd_chronicle() {
 	stop_running
 	env_set CHRONICLE "$name"
 	sync_project
-	log "CHRONICLE=$name (client protocol $(provider_protocol "$name")). Start it with: ./l2.sh up"
+	log "CHRONICLE=$name (client protocol $(provider_protocol "$name")). Start it with: $CLI up"
 }
 
 cmd_update() {
@@ -282,7 +327,7 @@ cmd_update() {
 		return
 	fi
 	log "Submodule moved ${before:0:10} -> ${after:0:10}"
-	log "Rebuild with: ./l2.sh up"
+	log "Rebuild with: $CLI up"
 	log "Record it with: git add $path && git commit -m \"Update $name to ${after:0:10}\""
 }
 
@@ -304,7 +349,7 @@ cmd_gm() {
 
 	local login="$1" level="${2:-$PROVIDER_GM_LEVEL}"
 	[[ "$login" =~ ^[A-Za-z0-9_-]+$ ]] \
-		|| die "Usage: ./l2.sh gm <login> [level]  (levels in $PROVIDER_ACCESS_LEVELS, default $PROVIDER_GM_LEVEL = Master)"
+		|| die "Usage: $CLI gm <login> [level]  (levels in $PROVIDER_ACCESS_LEVELS, default $PROVIDER_GM_LEVEL = Master)"
 	[[ "$level" =~ ^-?[0-9]+$ ]] || die "Level must be a number"
 
 	local online count
@@ -319,7 +364,7 @@ cmd_gm() {
 
 cmd_help() {
 	cat <<EOF
-Usage: ./l2.sh [command]   (without a command: status)
+Usage: $CLI [command]   (without a command: status)
 
   up [services]       Prepare source/.env, build and start
   down                Stop and remove containers (data volumes are kept)
@@ -328,7 +373,10 @@ Usage: ./l2.sh [command]   (without a command: status)
   ps                  Show container status
   status              Show the configured server and chronicle, its state, warnings (e.g. no geodata)
                       and the next step (default)
-  server [name]       List available servers or switch to one (e.g. l2jmobius)
+  server [name [chronicle]]
+                      List available servers or switch to one (e.g. l2jmobius), optionally with a chronicle
+  <server> [chronicle]
+                      Same as server <server> [chronicle], e.g. $CLI acis
   chronicle [name]    List the current server's chronicles or switch to one
   update              Move the server source to the latest upstream commit
   gm                  List characters with their access levels
@@ -365,5 +413,13 @@ case "$command" in
 	update) cmd_update ;;
 	gm) cmd_gm "$@" ;;
 	tools) prepare && docker compose --profile tools up -d phpmyadmin ;;
-	*) cmd_help; exit 1 ;;
+	*)
+		# ./l2.sh <server> [chronicle] is a shortcut for ./l2.sh server <server> [chronicle]
+		if [ -f "servers/$command/provider.sh" ]; then
+			cmd_server "$command" "$@"
+		else
+			cmd_help
+			exit 1
+		fi
+		;;
 esac

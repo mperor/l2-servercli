@@ -13,5 +13,7 @@ if (-not $bash) {
     exit 1
 }
 
+# l2.sh prints commands to run next; they should read the way this script was called
+$env:L2_CLI = '.\l2.ps1'
 & $bash "$PSScriptRoot/l2.sh" @args
 exit $LASTEXITCODE
