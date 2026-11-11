@@ -17,8 +17,8 @@ README.md       server-specific details
 merges the server's `compose.yml` over it by setting `COMPOSE_FILE` in `.env`, so plain `docker compose ...`
 commands work as well.
 
-Every server and chronicle is its own compose project, `l2-<server>-<chronicle>` (`COMPOSE_PROJECT_NAME` in
-`.env`, e.g. `l2-acis-interlude`), with its own containers, network, database volume
+Every server and chronicle is its own compose project, `l2server-<server>-<chronicle>` (`COMPOSE_PROJECT_NAME`
+in `.env`, e.g. `l2server-acis-interlude`), with its own containers, network, database volume
 (`<project>_db-data`) and game state volume (`<project>_game-state`, the game server's registration).
 `./l2server.sh up` removes the containers of any other project first, since they use the same ports; their
 volumes stay. `docker volume ls` lists them; delete one you no longer need with `docker volume rm <name>`.

@@ -2,7 +2,7 @@
 # The build context is the chronicle's sources/l2j/<CHRONICLE> (game + datapack); the login server, shared by
 # all chronicles, is the extra build context "login".
 x-build: &build
-  image: l2-l2j:${CHRONICLE:?set CHRONICLE in .env}
+  image: l2server-l2j:${CHRONICLE:?set CHRONICLE in .env}
   build:
     context: ./sources/l2j/${CHRONICLE}
     dockerfile: ../../../servers/l2j/Dockerfile.${CHRONICLE}

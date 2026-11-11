@@ -51,10 +51,10 @@ load_provider() {
 	source "servers/$(env_get SERVER)/provider.sh"
 }
 
-# One compose project per server and chronicle (e.g. l2-acis-interlude), so containers, network and
+# One compose project per server and chronicle (e.g. l2server-acis-interlude), so containers, network and
 # volumes never mix. Project names may only contain lowercase letters, digits, "_" and "-".
 project_name() {
-	printf 'l2-%s-%s' "$(env_get SERVER)" "$(provider_slug "$(env_get CHRONICLE)")" \
+	printf 'l2server-%s-%s' "$(env_get SERVER)" "$(provider_slug "$(env_get CHRONICLE)")" \
 		| tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '_'
 }
 
@@ -128,10 +128,16 @@ show_context() {
 	log "$PROVIDER_NAME $(env_get CHRONICLE) (project $(env_get COMPOSE_PROJECT_NAME))"
 }
 
+# Compose projects of this CLI: containers labelled l2server (docker-compose.yml), plus the names used
+# before the label: l2-<server>-<chronicle> and the single project l2jmobius. Pass -a for stopped ones too.
+l2_projects() {
+	docker ps "$@" --format '{{.Label "com.docker.compose.project"}}|{{.Label "l2server"}}' 2>/dev/null \
+		| grep -E '^(l2-[^|]*|l2jmobius)\||\|true$' | cut -d'|' -f1 | sort -u || true
+}
+
 # Other l2 projects with running containers (e.g. the previous server before ./l2server.sh up)
 running_other_projects() {
-	docker ps --format '{{.Label "com.docker.compose.project"}}' 2>/dev/null | grep -E '^(l2-|l2jmobius$)' | sort -u \
-		| grep -vx "$(env_get COMPOSE_PROJECT_NAME)" || true
+	l2_projects | grep -vx "$(env_get COMPOSE_PROJECT_NAME)" || true
 }
 
 # Things that work differently than one might expect for this setup
@@ -228,8 +234,7 @@ stop_running() {
 	fi
 }
 
-# Containers of other servers/chronicles hold the same host ports. "l2jmobius" is the single project
-# used before the per-chronicle projects.
+# Containers of other servers/chronicles hold the same host ports
 remove_other_projects() {
 	local current p
 	current="$(env_get COMPOSE_PROJECT_NAME)"
@@ -237,20 +242,31 @@ remove_other_projects() {
 		[ -n "$p" ] && [ "$p" != "$current" ] || continue
 		log "Removing containers of project $p (its data volumes are kept)"
 		docker compose -p "$p" --profile tools down --remove-orphans
-	done < <(docker ps -a --format '{{.Label "com.docker.compose.project"}}' | grep -E '^(l2-|l2jmobius$)' | sort -u)
+	done < <(l2_projects -a)
 }
 
-# Copies data from volumes of the earlier layout (provider_legacy_volumes) into this project's volumes,
-# once, before the project's volumes exist. The old volumes are left for the user to delete.
+# Volumes of earlier layouts, newest first: the l2-<server>-<chronicle> projects (before the l2server-
+# prefix), then the provider's own (provider_legacy_volumes)
+legacy_volumes() {
+	local old="l2-${1#l2server-}"
+	echo "db-data ${old}_db-data"
+	echo "game-state ${old}_game-state"
+	provider_legacy_volumes "$(env_get CHRONICLE)"
+}
+
+# Copies data from the newest existing volume of an earlier layout into this project's volumes, once,
+# before the project's volumes exist. The old volumes are left for the user to delete.
 migrate_legacy_volumes() {
-	local project key legacy pending=()
+	local project key legacy found=" " pending=()
 	project="$(env_get COMPOSE_PROJECT_NAME)"
 	while read -r key legacy; do
 		[ -n "$legacy" ] || continue
+		[[ "$found" == *" $key "* ]] && continue
 		docker volume inspect "$legacy" > /dev/null 2>&1 || continue
+		found+="$key "
 		docker volume inspect "${project}_$key" > /dev/null 2>&1 && continue
 		pending+=("$key $legacy")
-	done < <(provider_legacy_volumes "$(env_get CHRONICLE)")
+	done < <(legacy_volumes "$project")
 	[ ${#pending[@]} -gt 0 ] || return 0
 
 	docker compose build

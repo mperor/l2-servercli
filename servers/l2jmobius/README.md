@@ -14,7 +14,7 @@ submodule `sources/l2j_mobius`. Java 27, built with Ant.
 Any `L2J_Mobius_*` directory of the monorepo can be selected; `./l2server.sh chronicle` lists them all.
 The submodule is a shallow, blob-less, **sparse** checkout, so only the chronicles used so far are
 downloaded (~200 MB each instead of the whole repository). Each chronicle has its own image tag
-(`l2jmobius:<chronicle>`) and project (`l2-l2jmobius-<chronicle without the L2J_Mobius_ prefix>`).
+(`l2server-l2jmobius:<chronicle>`) and project (`l2server-l2jmobius-<chronicle without the L2J_Mobius_ prefix>`).
 
 ## Client protocol
 
