@@ -1,4 +1,4 @@
-# Windows wrapper: runs l2.sh with Git Bash (not WSL bash). Usage: .\l2.ps1 [command] [args]
+# Windows wrapper: runs l2server.sh with Git Bash (not WSL bash). Usage: .\l2server.ps1 [command] [args]
 $git = Get-Command git -ErrorAction SilentlyContinue
 $bash = $null
 if ($git) {
@@ -13,7 +13,7 @@ if (-not $bash) {
     exit 1
 }
 
-# l2.sh prints commands to run next; they should read the way this script was called
-$env:L2_CLI = '.\l2.ps1'
-& $bash "$PSScriptRoot/l2.sh" @args
+# l2server.sh prints commands to run next; they should read the way this script was called
+$env:L2_CLI = '.\l2server.ps1'
+& $bash "$PSScriptRoot/l2server.sh" @args
 exit $LASTEXITCODE

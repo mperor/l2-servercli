@@ -1,4 +1,4 @@
-# aCis provider for l2.sh (sourced, not executed); see servers/l2jmobius/provider.sh for the interface.
+# aCis provider for l2server.sh (sourced, not executed); see servers/l2jmobius/provider.sh for the interface.
 # aCis targets Interlude only, so there is a single chronicle.
 
 PROVIDER_NAME=aCis

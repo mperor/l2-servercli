@@ -1,4 +1,4 @@
-# L2J Server provider for l2.sh (sourced, not executed); see servers/l2jmobius/provider.sh for the interface.
+# L2J Server provider for l2server.sh (sourced, not executed); see servers/l2jmobius/provider.sh for the interface.
 # Each chronicle is a game and a datapack branch (sources/l2j/<chronicle>/{game,datapack}); the login server
 # (sources/l2j/login, master) serves all of them.
 
@@ -22,7 +22,7 @@ esac
 
 provider_chronicles() { printf '%s\n' Interlude HighFive; }
 
-# Submodules of a chronicle, used by provider_prepare and ./l2.sh update
+# Submodules of a chronicle, used by provider_prepare and ./l2server.sh update
 provider_submodules() {
 	local chronicle
 	chronicle="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"

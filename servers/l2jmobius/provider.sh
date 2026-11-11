@@ -1,10 +1,10 @@
-# L2jMobius provider for l2.sh (sourced, not executed).
+# L2jMobius provider for l2server.sh (sourced, not executed).
 # A provider defines:
-#   PROVIDER_NAME                   display name (read with sed by l2.sh status for other servers, keep it plain)
+#   PROVIDER_NAME                   display name (read with sed by l2server.sh status for other servers, keep it plain)
 #   PROVIDER_SUBMODULE              submodule name in .gitmodules holding the server source
 #   PROVIDER_DEFAULT_CHRONICLE      CHRONICLE used when switching to this server
-#   PROVIDER_GM_LEVEL               characters.accesslevel of the Master level (./l2.sh gm default)
-#   PROVIDER_ACCESS_LEVELS          where the access levels are defined (shown in ./l2.sh gm usage)
+#   PROVIDER_GM_LEVEL               characters.accesslevel of the Master level (./l2server.sh gm default)
+#   PROVIDER_ACCESS_LEVELS          where the access levels are defined (shown in ./l2server.sh gm usage)
 #   PROVIDER_GEODATA_FILES          regex for geodata region file names in geodata/<server>/
 #   PROVIDER_REGISTERED_LOG         game server log text once it is registered on the login server
 #   provider_prepare <chronicle>    makes the source of the chronicle available (dies if unknown)
@@ -28,7 +28,7 @@ provider_prepare() {
 	path="$(submodule_path "$PROVIDER_SUBMODULE")"
 	[ -d "$path/$1" ] && return
 	provider_chronicles | grep -qx "$1" \
-		|| die "Unknown chronicle '$1'. List them with: ./l2.sh chronicle"
+		|| die "Unknown chronicle '$1'. List them with: $CLI chronicle"
 	log "Adding $1 to sparse checkout"
 	sub "$PROVIDER_SUBMODULE" sparse-checkout add "$1"
 }

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Single entry point for L2 Quickstart.
-# Usage: ./l2.sh [command] [args]   (no command: status; run ./l2.sh help for the list)
+# Single entry point for L2 Server CLI.
+# Usage: ./l2server.sh [command] [args]   (no command: status; run ./l2server.sh help for the list)
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
-# How the user calls this script (l2.ps1 sets .\l2.ps1), used in the commands it suggests
-CLI="${L2_CLI:-./l2.sh}"
+# How the user calls this script (l2server.ps1 sets .\l2server.ps1), used in the commands it suggests
+CLI="${L2_CLI:-./l2server.sh}"
 
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mWarning:\033[0m %s\n' "$*"; }
@@ -128,7 +128,7 @@ show_context() {
 	log "$PROVIDER_NAME $(env_get CHRONICLE) (project $(env_get COMPOSE_PROJECT_NAME))"
 }
 
-# Other l2 projects with running containers (e.g. the previous server before ./l2.sh up)
+# Other l2 projects with running containers (e.g. the previous server before ./l2server.sh up)
 running_other_projects() {
 	docker ps --format '{{.Label "com.docker.compose.project"}}' 2>/dev/null | grep -E '^(l2-|l2jmobius$)' | sort -u \
 		| grep -vx "$(env_get COMPOSE_PROJECT_NAME)" || true
@@ -157,7 +157,7 @@ services_state() {
 }
 
 status_row() { printf '  %-16s %s\n' "$1" "$2"; }
-next_row() { printf '  %-32s %s\n' "$1" "$2"; }
+next_row() { printf '  %-38s %s\n' "$1" "$2"; }
 
 cmd_status() {
 	local chronicle server project state ready=false starting=false
@@ -380,14 +380,14 @@ cmd_gm() {
 	log "Set access level $level on $count character(s) of $login"
 }
 
-# figlet -f smslant "L2 Quickstart"; only on a terminal, so redirected output stays plain
+# figlet -f smslant "L2 Server CLI"; only on a terminal, so redirected output stays plain
 show_banner() {
 	[ -t 1 ] || return 0
 	cat <<'EOF'
-   __   ___    ____       _     __        __           __
-  / /  |_  |  / __ \__ __(_)___/ /__ ___ / /____ _____/ /_
- / /__/ __/  / /_/ / // / / __/  '_/(_-</ __/ _ `/ __/ __/
-/____/____/  \___\_\_,_/_/\__/_/\_\/___/\__/\_,_/_/  \__/
+   __   ___    ____                       _______   ____
+  / /  |_  |  / __/__ _____  _____ ____  / ___/ /  /  _/
+ / /__/ __/  _\ \/ -_) __/ |/ / -_) __/ / /__/ /___/ /
+/____/____/ /___/\__/_/  |___/\__/_/    \___/____/___/
 
 EOF
 }
@@ -445,7 +445,7 @@ case "$command" in
 	gm) cmd_gm "$@" ;;
 	tools) prepare && docker compose --profile tools up -d phpmyadmin ;;
 	*)
-		# ./l2.sh <server> [chronicle] is a shortcut for ./l2.sh server <server> [chronicle]
+		# ./l2server.sh <server> [chronicle] is a shortcut for ./l2server.sh server <server> [chronicle]
 		if [ -f "servers/$command/provider.sh" ]; then
 			cmd_server "$command" "$@"
 		else

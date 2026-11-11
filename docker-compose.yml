@@ -1,7 +1,7 @@
 # Server-independent part. The server-specific part (image, build, database name, SQL import, log paths)
 # is servers/<SERVER>/compose.yml, merged on top through COMPOSE_FILE in .env. The project name, and with
 # it the container, network and volume names, is COMPOSE_PROJECT_NAME in .env: one project per server and
-# chronicle, e.g. l2-acis-interlude. Both are kept in sync by l2.sh (.env is created from .env.example).
+# chronicle, e.g. l2-acis-interlude. Both are kept in sync by l2server.sh (.env is created from .env.example).
 x-db-env: &db-env
   MARIADB_USER: ${MARIADB_USER:?set MARIADB_USER in .env}
   MARIADB_PASSWORD: ${MARIADB_PASSWORD:?set MARIADB_PASSWORD in .env}

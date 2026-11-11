@@ -17,7 +17,7 @@ overrides/l2jmobius/
 Copy the original file from `sources/l2j_mobius/<CHRONICLE>/dist/...`, edit it, then apply it with:
 
 ```
-./l2.sh restart game
+./l2server.sh restart game
 ```
 
 These L2jMobius settings are always set from `.env` and cannot be overridden here:
