@@ -3,3 +3,8 @@
 	url = https://gitlab.com/MobiusDevelopment/L2J_Mobius.git
 	branch = master
 	shallow = true
+[submodule "acis"]
+	path = sources/acis
+	url = https://gitlab.com/Tryskell/acis_public.git
+	branch = master
+	shallow = true

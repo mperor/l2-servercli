@@ -2,12 +2,16 @@
 # A provider defines:
 #   PROVIDER_SUBMODULE              submodule name in .gitmodules holding the server source
 #   PROVIDER_DEFAULT_CHRONICLE      CHRONICLE used when switching to this server
+#   PROVIDER_GM_LEVEL               characters.accesslevel of the Master level (./l2.sh gm default)
+#   PROVIDER_ACCESS_LEVELS          where the access levels are defined (shown in ./l2.sh gm usage)
 #   provider_prepare <chronicle>    makes the source of the chronicle available (dies if unknown)
 #   provider_chronicles             lists the chronicles this server can run
 #   provider_protocol <chronicle>   client protocol revision the game server accepts
 
 PROVIDER_SUBMODULE=l2j_mobius
 PROVIDER_DEFAULT_CHRONICLE=L2J_Mobius_CT_0_Interlude
+PROVIDER_GM_LEVEL=100
+PROVIDER_ACCESS_LEVELS=dist/game/config/AccessLevels.xml
 
 # The monorepo has ~40 chronicles; the sparse checkout holds only the ones used so far
 provider_prepare() {

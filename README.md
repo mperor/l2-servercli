@@ -6,6 +6,8 @@ MariaDB. Supported servers (`SERVER` in `.env`, see [Servers](#servers)):
 
 - **`l2jmobius`** (default) - [L2jMobius](https://l2jmobius.org/), any chronicle of the
   [monorepo](https://gitlab.com/MobiusDevelopment/L2J_Mobius), e.g. C6 Interlude; Java 27.
+- **`acis`** - [aCis](https://gitlab.com/Tryskell/acis_public) (Interlude only, latest public
+  revision); Java 21.
 
 ## Requirements
 
@@ -57,6 +59,25 @@ own image, database volume and `overrides/<server>/` directory, so switching kee
 `servers/<server>/compose.yml` adds the server's image, build and SQL import. `l2.sh` merges them by
 setting `COMPOSE_FILE` in `.env`, so plain `docker compose ...` commands work as well.
 
+### aCis
+
+```bash
+./l2.sh server acis   # CHRONICLE=Interlude
+./l2.sh up            # game server ready when "./l2.sh logs game" shows "Registered as server"
+```
+
+- Configuration is in `*.properties` files: override e.g. `overrides/acis/game/config/players.properties`
+  (from `sources/acis/aCis_gameserver/config/`). The database connection, `LoginHost`, `Hostname`
+  (= `EXTERNAL_HOST`) and the login's `AcceptNewGameServer = True` are always set from `.env`.
+- The game server's registration (`config/hexid.txt`) is generated on the first start and kept in the
+  `l2-state-acis-Interlude` volume; no `RegisterGameServer` step is needed.
+- The public repository has no geodata, so the server starts without it (no line of sight or
+  pathfinding). Put the region files into `overrides/acis/game/data/geodata/` to use them.
+- One source change is applied at build time: the login server normally sends clients with a private IP
+  the game server's container address, which is unreachable behind Docker's NAT; here it always sends
+  `Hostname`.
+- GM: `./l2.sh gm <login>` sets level `8` (Master, see `aCis_datapack/data/xml/accessLevels.xml`).
+
 ## Chronicles
 
 Any `L2J_Mobius_*` directory of the upstream repository can be selected. `./l2.sh chronicle` lists
@@ -71,8 +92,9 @@ Each chronicle gets its own image tag (`l2jmobius:<chronicle>`) and its own data
 
 A game client is not included; use your own client of the selected chronicle.
 
-1. **Matching protocol.** The game server accepts only the protocol revision in the chronicle's
-   `dist/game/config/Server.ini` (`AllowedProtocolRevisions`; e.g. `746` for Interlude, `419` for C1).
+1. **Matching protocol.** L2jMobius accepts only the protocol revision in the chronicle's
+   `dist/game/config/Server.ini` (`AllowedProtocolRevisions`; e.g. `746` for Interlude, `419` for C1),
+   aCis accepts Interlude clients `737`-`746`.
    `./l2.sh chronicle` and `./l2.sh up` print it. With a mismatch the login works, but the connection
    drops after selecting the server.
 2. **Login address.** The client must connect to `127.0.0.1:2106` instead of the official login server.
@@ -92,8 +114,8 @@ A game client is not included; use your own client of the selected chronicle.
 
 1. Log in, create a character and log out (the game saves the access level on logout and would
    overwrite the change).
-2. `./l2.sh gm <login>` sets level `100` (Master) on all characters of the account; levels are defined
-   in `dist/game/config/AccessLevels.xml`.
+2. `./l2.sh gm <login>` sets the Master level on all characters of the account: `100` for L2jMobius
+   (levels in `dist/game/config/AccessLevels.xml`), `8` for aCis (`data/xml/accessLevels.xml`).
 3. Check with `./l2.sh gm` (lists characters and levels), then log in and type `//admin` in the chat.
    GMs start invisible and invulnerable (`GMStartup*` in `General.ini`); `//visible` shows you to others.
 
@@ -124,6 +146,7 @@ servers/<server>/entrypoint.sh   applies overrides, sets DB/network settings, st
 servers/<server>/initdb.sh       imports the server's SQL on the first database start
 l2.sh / l2.ps1                   the single entry point
 sources/l2j_mobius/              submodule: MobiusDevelopment/L2J_Mobius (sparse checkout)
+sources/acis/                    submodule: Tryskell/acis_public (shallow)
 overrides/<server>/              your config overrides
 data/logs/<server>/              server logs (git-ignored)
 ```
@@ -161,5 +184,6 @@ Merge upstream changes into your mirror from time to time.
 - Inspired by [stsourlidakis/l2jmobius-docker](https://github.com/stsourlidakis/l2jmobius-docker) (WTFPL),
   rewritten for the current L2jMobius layout (`Database.ini`, Java 27, multi-chronicle monorepo)
   and generalised to several server emulators.
-- L2jMobius is licensed under the GNU GPL v3; see the upstream repository.
+- L2jMobius is licensed under the GNU GPL v3; see the upstream repository. The public aCis repository
+  ships no license file; see its project page.
 - This repository's own files may be used under the same terms as the original (WTFPL).

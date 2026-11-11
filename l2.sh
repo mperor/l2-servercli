@@ -190,8 +190,9 @@ cmd_gm() {
 		return
 	fi
 
-	local login="$1" level="${2:-100}"
-	[[ "$login" =~ ^[A-Za-z0-9_-]+$ ]] || die "Usage: ./l2.sh gm <login> [level]  (levels in AccessLevels.xml, default 100 = Master)"
+	local login="$1" level="${2:-$PROVIDER_GM_LEVEL}"
+	[[ "$login" =~ ^[A-Za-z0-9_-]+$ ]] \
+		|| die "Usage: ./l2.sh gm <login> [level]  (levels in $PROVIDER_ACCESS_LEVELS, default $PROVIDER_GM_LEVEL = Master)"
 	[[ "$level" =~ ^-?[0-9]+$ ]] || die "Level must be a number"
 
 	local online count
@@ -217,7 +218,7 @@ Usage: ./l2.sh [command]
   chronicle [name]    List the current server's chronicles or switch to one
   update              Move the server source to the latest upstream commit
   gm                  List characters with their access levels
-  gm <login> [level]  Set the access level of an account's characters (default 100 = Master)
+  gm <login> [level]  Set the access level of an account's characters (default: the server's Master level)
   tools               Start phpMyAdmin on http://localhost:\$PHPMYADMIN_PORT
 EOF
 }

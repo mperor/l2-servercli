@@ -1,0 +1,31 @@
+# aCis part of the stack, merged over docker-compose.yml (paths are relative to the repository root).
+# The build context is the whole sources/acis submodule (aCis_gameserver + aCis_datapack).
+x-build: &build
+  image: l2-acis:${CHRONICLE:?set CHRONICLE in .env}
+  build:
+    context: ./sources/acis
+    dockerfile: ../../servers/acis/Dockerfile
+    additional_contexts:
+      scripts: ./servers/acis
+
+services:
+  db:
+    volumes:
+      - ./servers/acis/initdb.sh:/docker-entrypoint-initdb.d/initdb.sh:ro
+      - ./sources/acis/aCis_datapack/sql:/l2-sql:ro
+
+  login:
+    <<: *build
+    volumes:
+      - ./data/logs/acis/login:/opt/l2/dist/login/log
+
+  game:
+    <<: *build
+    volumes:
+      - ./data/logs/acis/game:/opt/l2/dist/game/log
+
+volumes:
+  db-data:
+    name: l2-db-acis-${CHRONICLE}
+  game-state:
+    name: l2-state-acis-${CHRONICLE}
