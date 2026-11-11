@@ -8,8 +8,12 @@ x-build: &build
     additional_contexts:
       scripts: ./servers/l2jmobius
 
+x-db-name: &db-name
+  MARIADB_DATABASE: l2jmobius
+
 services:
   db:
+    environment: *db-name
     volumes:
       - ./servers/l2jmobius/initdb.sh:/docker-entrypoint-initdb.d/initdb.sh:ro
       - ./sources/l2j_mobius/${CHRONICLE}/dist/db_installer/sql/login:/l2-sql/login:ro
@@ -17,17 +21,12 @@ services:
 
   login:
     <<: *build
+    environment: *db-name
     volumes:
       - ./data/logs/l2jmobius/login:/opt/l2/dist/login/log
 
   game:
     <<: *build
+    environment: *db-name
     volumes:
       - ./data/logs/l2jmobius/game:/opt/l2/dist/game/log
-
-# Names predate the multi-server layout and are kept so existing characters stay where they are
-volumes:
-  db-data:
-    name: l2jmobius-db-${CHRONICLE}
-  game-state:
-    name: l2jmobius-state-${CHRONICLE}

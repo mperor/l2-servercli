@@ -8,27 +8,27 @@ x-build: &build
     additional_contexts:
       scripts: ./servers/acis
 
+x-db-name: &db-name
+  MARIADB_DATABASE: acis
+
 services:
   db:
+    environment: *db-name
     volumes:
       - ./servers/acis/initdb.sh:/docker-entrypoint-initdb.d/initdb.sh:ro
       - ./sources/acis/aCis_datapack/sql:/l2-sql:ro
 
   login:
     <<: *build
+    environment: *db-name
     volumes:
       - ./data/logs/acis/login:/opt/l2/dist/login/log
 
   game:
     <<: *build
+    environment: *db-name
     volumes:
       - ./data/logs/acis/game:/opt/l2/dist/game/log
       # Region files (*_conv.dat or *.l2j), not part of the aCis repository; empty means no geodata.
       # Writable: aCis saves geo_bugs.txt there
       - ./geodata/acis:/opt/l2/dist/game/data/geodata
-
-volumes:
-  db-data:
-    name: l2-db-acis-${CHRONICLE}
-  game-state:
-    name: l2-state-acis-${CHRONICLE}

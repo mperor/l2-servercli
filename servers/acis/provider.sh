@@ -14,5 +14,9 @@ provider_prepare() {
 
 provider_chronicles() { echo Interlude; }
 
+provider_slug() { printf '%s' "${1,,}"; }
+
+provider_legacy_volumes() { :; }
+
 # Hard-coded in SendProtocolVersion.java
 provider_protocol() { echo "746 (also 737, 740, 744)"; }

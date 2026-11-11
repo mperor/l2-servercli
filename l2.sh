@@ -47,6 +47,19 @@ load_provider() {
 	source "servers/$(env_get SERVER)/provider.sh"
 }
 
+# One compose project per server and chronicle (e.g. l2-acis-interlude), so containers, network and
+# volumes never mix. Project names may only contain lowercase letters, digits, "_" and "-".
+project_name() {
+	printf 'l2-%s-%s' "$(env_get SERVER)" "$(provider_slug "$(env_get CHRONICLE)")" \
+		| tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '_'
+}
+
+sync_project() {
+	local project
+	project="$(project_name)"
+	[ "$(env_get COMPOSE_PROJECT_NAME)" = "$project" ] || env_set COMPOSE_PROJECT_NAME "$project"
+}
+
 submodule_path() { git config -f .gitmodules "submodule.$1.path"; }
 
 # core.longpaths: some datapack paths exceed the Windows 260 character limit
@@ -108,9 +121,46 @@ stop_running() {
 	fi
 }
 
+# Containers of other servers/chronicles hold the same host ports. "l2jmobius" is the single project
+# used before the per-chronicle projects.
+remove_other_projects() {
+	local current p
+	current="$(env_get COMPOSE_PROJECT_NAME)"
+	while read -r p; do
+		[ -n "$p" ] && [ "$p" != "$current" ] || continue
+		log "Removing containers of project $p (its data volumes are kept)"
+		docker compose -p "$p" --profile tools down --remove-orphans
+	done < <(docker ps -a --format '{{.Label "com.docker.compose.project"}}' | grep -E '^(l2-|l2jmobius$)' | sort -u)
+}
+
+# Copies data from volumes of the earlier layout (provider_legacy_volumes) into this project's volumes,
+# once, before the project's volumes exist. The old volumes are left for the user to delete.
+migrate_legacy_volumes() {
+	local project key legacy pending=()
+	project="$(env_get COMPOSE_PROJECT_NAME)"
+	while read -r key legacy; do
+		[ -n "$legacy" ] || continue
+		docker volume inspect "$legacy" > /dev/null 2>&1 || continue
+		docker volume inspect "${project}_$key" > /dev/null 2>&1 && continue
+		pending+=("$key $legacy")
+	done < <(provider_legacy_volumes "$(env_get CHRONICLE)")
+	[ ${#pending[@]} -gt 0 ] || return 0
+
+	docker compose build
+	docker compose up --no-start
+	local entry
+	for entry in "${pending[@]}"; do
+		read -r key legacy <<< "$entry"
+		log "Copying volume $legacy to ${project}_$key (delete the old one when no longer needed)"
+		docker run --rm -v "$legacy:/from:ro" -v "${project}_$key:/to" --entrypoint sh mariadb:11.8 -c 'cp -a /from/. /to/'
+	done
+}
+
 cmd_up() {
 	prepare
-	log "Building and starting $(env_get SERVER) $(env_get CHRONICLE)"
+	remove_other_projects
+	migrate_legacy_volumes
+	log "Building and starting $(env_get SERVER) $(env_get CHRONICLE) (project $(env_get COMPOSE_PROJECT_NAME))"
 	docker compose up -d --build "$@"
 	log "Login server: 127.0.0.1:$(env_get LOGIN_PORT), game server: 7777, client protocol: $(provider_protocol "$(env_get CHRONICLE)")"
 	log "Follow startup with: ./l2.sh logs game"
@@ -133,6 +183,7 @@ cmd_server() {
 	select_server_compose "$name"
 	load_provider
 	env_set CHRONICLE "$PROVIDER_DEFAULT_CHRONICLE"
+	sync_project
 	log "SERVER=$name, CHRONICLE=$PROVIDER_DEFAULT_CHRONICLE. Start it with: ./l2.sh up"
 }
 
@@ -152,6 +203,7 @@ cmd_chronicle() {
 	provider_prepare "$name"
 	stop_running
 	env_set CHRONICLE "$name"
+	sync_project
 	log "CHRONICLE=$name (client protocol $(provider_protocol "$name")). Start it with: ./l2.sh up"
 }
 
@@ -232,6 +284,7 @@ esac
 
 ensure_env
 load_provider
+sync_project
 
 case "$command" in
 	up) cmd_up "$@" ;;

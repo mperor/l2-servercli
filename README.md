@@ -52,12 +52,23 @@ Then connect a game client, see [Connecting a client](#connecting-a-client).
 ## Servers
 
 `./l2.sh server` lists the servers in `servers/`; switch with `./l2.sh server <name>` (stops the
-running one and selects the server's default chronicle, then run `./l2.sh up`). Each server has its
-own image, database volume and `overrides/<server>/` directory, so switching keeps data apart.
+running one and selects the server's default chronicle, then run `./l2.sh up`).
+
+Every server and chronicle is its own compose project, `l2-<server>-<chronicle>`
+(e.g. `l2-acis-interlude`, `l2-l2jmobius-ct_0_interlude`), with its own containers, network,
+database (`<project>_db-data`) and game state volume (`<project>_game-state`), so switching back and
+forth keeps characters intact. `./l2.sh up` removes the containers of any other project first, since
+they use the same ports; their volumes stay. `docker volume ls` lists them; delete one you no longer
+need with `docker volume rm <name>`.
 
 `docker-compose.yml` holds what all servers share (MariaDB, ports, overrides, phpMyAdmin);
-`servers/<server>/compose.yml` adds the server's image, build and SQL import. `l2.sh` merges them by
-setting `COMPOSE_FILE` in `.env`, so plain `docker compose ...` commands work as well.
+`servers/<server>/compose.yml` adds the server's image, build, database name and SQL import. `l2.sh`
+merges them by setting `COMPOSE_FILE` and `COMPOSE_PROJECT_NAME` in `.env`, so plain
+`docker compose ...` commands work as well.
+
+Earlier versions kept all L2jMobius chronicles in one project `l2jmobius` with volumes
+`l2jmobius-db-<chronicle>` / `l2jmobius-state-<chronicle>`. `./l2.sh up` copies them once into the
+chronicle's new volumes; the old volumes are not touched and can be deleted afterwards.
 
 ### aCis
 
@@ -70,7 +81,7 @@ setting `COMPOSE_FILE` in `.env`, so plain `docker compose ...` commands work as
   (from `sources/acis/aCis_gameserver/config/`). The database connection, `LoginHost`, `Hostname`
   (= `EXTERNAL_HOST`) and the login's `AcceptNewGameServer = True` are always set from `.env`.
 - The game server's registration (`config/hexid.txt`) is generated on the first start and kept in the
-  `l2-state-acis-Interlude` volume; no `RegisterGameServer` step is needed.
+  `l2-acis-interlude_game-state` volume; no `RegisterGameServer` step is needed. The database is `acis`.
 - **Geodata** (Interlude region files, `XX_YY_conv.dat` or `XX_YY.l2j`) is not part of the aCis
   repository and has to be obtained separately. Put the files into `geodata/acis/` (git-ignored, mounted
   into the game server) and run `./l2.sh restart game`; the format is detected from the file names and
@@ -89,8 +100,8 @@ them all; switch with `./l2.sh chronicle <name>` (stops the running one, then ru
 Only the selected chronicle is downloaded.
 
 The default, used as the example throughout this README, is `L2J_Mobius_CT_0_Interlude`.
-Each chronicle gets its own image tag (`l2jmobius:<chronicle>`) and its own database volume
-(`l2jmobius-db-<chronicle>`), so switching back and forth keeps characters intact.
+Each chronicle gets its own image tag (`l2jmobius:<chronicle>`) and its own project
+(`l2-l2jmobius-<chronicle without the L2J_Mobius_ prefix>`, see [Servers](#servers)).
 
 ## Connecting a client
 
@@ -128,7 +139,8 @@ in a container without a display.
 
 ## Configuration
 
-- **`.env`** - server, chronicle, database credentials, `EXTERNAL_HOST`, ports, JVM options.
+- **`.env`** - server, chronicle, database credentials, `EXTERNAL_HOST`, ports, JVM options
+  (`COMPOSE_*` lines are maintained by `l2.sh`).
 - **`overrides/<server>/`** - your own versions of any file under `dist/game` or `dist/login`
   (e.g. `overrides/l2jmobius/game/config/Rates.ini`). They are copied over the defaults on every
   container start, so no rebuild is needed. See [overrides/README.md](overrides/README.md).

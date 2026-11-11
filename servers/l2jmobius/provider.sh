@@ -7,6 +7,8 @@
 #   provider_prepare <chronicle>    makes the source of the chronicle available (dies if unknown)
 #   provider_chronicles             lists the chronicles this server can run
 #   provider_protocol <chronicle>   client protocol revision the game server accepts
+#   provider_slug <chronicle>       short chronicle name for the compose project (l2-<server>-<slug>)
+#   provider_legacy_volumes <chr>   "<volume key> <old volume name>" lines to copy once into the project
 
 PROVIDER_SUBMODULE=l2j_mobius
 PROVIDER_DEFAULT_CHRONICLE=L2J_Mobius_CT_0_Interlude
@@ -27,6 +29,15 @@ provider_prepare() {
 
 # Lists every chronicle directory in the submodule commit (works without checking them out)
 provider_chronicles() { sub "$PROVIDER_SUBMODULE" ls-tree -d --name-only HEAD | grep '^L2J_Mobius_'; }
+
+# L2J_Mobius_CT_0_Interlude -> ct_0_interlude (project l2-l2jmobius-ct_0_interlude)
+provider_slug() { local s="${1#L2J_Mobius_}"; printf '%s' "${s,,}"; }
+
+# Before the per-chronicle projects all chronicles shared the project "l2jmobius" with these volume names
+provider_legacy_volumes() {
+	echo "db-data l2jmobius-db-$1"
+	echo "game-state l2jmobius-state-$1"
+}
 
 provider_protocol() {
 	sed -n 's/^AllowedProtocolRevisions *= *//p' \
